@@ -3,20 +3,26 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.android.kotlin.multiplatform.library)
-    alias(libs.plugins.vanniktech.mavenPublish)
 }
 
-group = "io.github.kotlin"
-version = "1.0.0"
+group = "com.mikromarkdown"
+version = "0.1.0"
 
 kotlin {
-    jvm()
+    jvm {
+        compilerOptions {
+            jvmTarget = JvmTarget.JVM_21
+        }
+        testRuns["test"].executionTask.configure {
+            useJUnitPlatform()
+        }
+    }
+
     androidLibrary {
-        namespace = "org.jetbrains.kotlinx.multiplatform.library.template"
+        namespace = "com.mikromarkdown"
         compileSdk = libs.versions.android.compileSdk.get().toInt()
         minSdk = libs.versions.android.minSdk.get().toInt()
 
-        withJava() // enable java compilation support
         withHostTestBuilder {}.configure {}
         withDeviceTestBuilder {
             sourceSetTreeName = "test"
@@ -26,51 +32,48 @@ kotlin {
             jvmTarget = JvmTarget.JVM_11
         }
     }
-    iosArm64()
-    iosSimulatorArm64()
-    linuxX64()
 
     sourceSets {
-        commonMain.dependencies {
-            //put your multiplatform dependencies here
+        val jvmAndroidMain by creating {
+            dependsOn(getByName("commonMain"))
         }
 
-        commonTest.dependencies {
-            implementation(libs.kotlin.test)
-        }
-    }
-}
-
-mavenPublishing {
-    publishToMavenCentral()
-
-    signAllPublications()
-
-    coordinates(group.toString(), "library", version.toString())
-
-    pom {
-        name = "My library"
-        description = "A library."
-        inceptionYear = "2024"
-        url = "https://github.com/kotlin/multiplatform-library-template/"
-        licenses {
-            license {
-                name = "XXX"
-                url = "YYY"
-                distribution = "ZZZ"
+        getByName("jvmMain") {
+            dependsOn(jvmAndroidMain)
+            dependencies {
+                implementation(libs.jsoup)
+                implementation(libs.flexmark.html2md)
+                implementation(libs.jackson.kotlin)
+                implementation(libs.commons.csv)
+                implementation(libs.poi.ooxml)
+                implementation(libs.tika.core)
+                implementation(libs.pdfbox)
             }
         }
-        developers {
-            developer {
-                id = "XXX"
-                name = "YYY"
-                url = "ZZZ"
+
+        getByName("androidMain") {
+            dependsOn(jvmAndroidMain)
+            dependencies {
+                implementation(libs.jsoup)
+                implementation(libs.flexmark.html2md)
+                implementation(libs.jackson.kotlin)
+                implementation(libs.commons.csv)
+                implementation(libs.poi.ooxml)
+                implementation(libs.pdfbox.android)
             }
         }
-        scm {
-            url = "XXX"
-            connection = "YYY"
-            developerConnection = "ZZZ"
+
+        getByName("commonTest") {
+            dependencies {
+                implementation(libs.kotlin.test)
+            }
+        }
+
+        getByName("jvmTest") {
+            dependencies {
+                implementation(libs.junit.jupiter)
+                implementation(libs.kotlin.test)
+            }
         }
     }
 }
