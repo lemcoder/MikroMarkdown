@@ -4,10 +4,12 @@ import io.github.lemcoder.mikromarkdown.ConversionResult
 import io.github.lemcoder.mikromarkdown.DocumentConverter
 import io.github.lemcoder.mikromarkdown.StreamInfo
 import org.apache.poi.sl.usermodel.Placeholder
+import org.apache.poi.xslf.usermodel.XSLFPictureShape
 import org.apache.poi.xslf.usermodel.XSLFSimpleShape
 import org.apache.poi.xslf.usermodel.XSLFTable
 import org.apache.poi.xslf.usermodel.XSLFTextShape
 import org.apache.poi.xslf.usermodel.XMLSlideShow
+import org.openxmlformats.schemas.presentationml.x2006.main.CTPicture
 
 class PptxConverter : DocumentConverter {
     override fun accepts(bytes: ByteArray, info: StreamInfo): Boolean {
@@ -45,6 +47,10 @@ class PptxConverter : DocumentConverter {
                                 else sb.appendLine(paraText)
                             }
                         }
+                    }
+                    shape is XSLFPictureShape -> {
+                        val descr = (shape.xmlObject as? CTPicture)?.nvPicPr?.cNvPr?.descr
+                        if (!descr.isNullOrBlank()) sb.appendLine(descr)
                     }
                     shape is XSLFTable -> sb.appendLine(convertTable(shape))
                 }

@@ -24,10 +24,12 @@ class EpubConverter : DocumentConverter {
         val opfBytes = entries[opfPath] ?: entries[opfPath.removePrefix("/")] ?: return ConversionResult(markdown = "")
         val opfDir = opfPath.substringBeforeLast("/", "")
 
-        val (manifest, spine) = parseOpf(opfBytes)
+        val (manifest, spine, metadata) = parseOpf(opfBytes)
 
         val sb = StringBuilder()
-        var title: String? = null
+        var title: String? = metadata["title"]
+
+        metadata["description"]?.let { sb.appendLine(it).appendLine() }
 
         for (idref in spine) {
             val href = manifest[idref] ?: continue
@@ -35,7 +37,7 @@ class EpubConverter : DocumentConverter {
             val htmlBytes = entries[fullPath] ?: entries[fullPath.removePrefix("/")] ?: continue
             val html = htmlBytes.toString(Charsets.UTF_8)
             val (markdown, chapterTitle) = HtmlToMarkdown.convert(html)
-            if (title == null) title = chapterTitle
+            if (title == null && chapterTitle != null) title = chapterTitle
             if (markdown.isNotBlank()) {
                 sb.appendLine(markdown)
                 sb.appendLine()
@@ -67,8 +69,19 @@ class EpubConverter : DocumentConverter {
         return (rootfiles.item(0) as? Element)?.getAttribute("full-path")
     }
 
-    private fun parseOpf(opfBytes: ByteArray): Pair<Map<String, String>, List<String>> {
-        val doc = parseXml(opfBytes) ?: return emptyMap<String, String>() to emptyList()
+    private fun parseOpf(opfBytes: ByteArray): Triple<Map<String, String>, List<String>, Map<String, String>> {
+        val doc = parseXml(opfBytes) ?: return Triple(emptyMap(), emptyList(), emptyMap())
+
+        val metadata = mutableMapOf<String, String>()
+        for (tag in listOf("dc:title", "dc:description")) {
+            val nodes = doc.getElementsByTagName(tag)
+            if (nodes.length > 0) {
+                val text = nodes.item(0).textContent?.trim()
+                if (!text.isNullOrEmpty()) {
+                    metadata[tag.removePrefix("dc:")] = text
+                }
+            }
+        }
 
         val manifest = mutableMapOf<String, String>()
         val manifestItems = doc.getElementsByTagName("item")
@@ -91,7 +104,7 @@ class EpubConverter : DocumentConverter {
             if (idref.isNotEmpty()) spine.add(idref)
         }
 
-        return manifest to spine
+        return Triple(manifest, spine, metadata)
     }
 
     private fun parseXml(bytes: ByteArray) = try {

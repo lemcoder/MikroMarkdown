@@ -12,7 +12,7 @@ object HtmlToMarkdown {
 
     fun convert(html: String, baseUri: String = ""): Pair<String, String?> {
         val doc = Jsoup.parse(html, baseUri)
-        doc.select("script, style").remove()
+        doc.select("script, style, nav, aside").remove()
         val title = doc.title().ifEmpty { null }
         val body = doc.body().html()
         val markdown = converter.convert(body)

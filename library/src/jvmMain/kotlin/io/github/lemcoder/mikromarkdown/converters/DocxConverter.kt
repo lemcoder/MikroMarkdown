@@ -23,7 +23,7 @@ class DocxConverter : DocumentConverter {
                 is XWPFParagraph -> {
                     val md = convertParagraph(element)
                     if (md.isNotBlank()) {
-                        if (title == null && headingLevel(element.style) > 0) {
+                        if (title == null && headingLevel(element.styleID) > 0) {
                             title = element.text
                         }
                         sb.appendLine(md)
@@ -56,7 +56,7 @@ class DocxConverter : DocumentConverter {
 
         if (rawText.isBlank()) return ""
 
-        val level = headingLevel(para.style)
+        val level = headingLevel(para.styleID)
         val isListItem = para.numID != null
 
         return when {
@@ -88,7 +88,10 @@ class DocxConverter : DocumentConverter {
 
     private fun headingLevel(style: String?): Int {
         val s = style?.replace("\\s+".toRegex(), "") ?: return 0
-        if (!s.startsWith("Heading", ignoreCase = true)) return 0
-        return s.drop(7).toIntOrNull()?.coerceIn(1, 6) ?: 0
+        if (s.startsWith("Heading", ignoreCase = true)) {
+            return s.drop(7).toIntOrNull()?.coerceIn(1, 6) ?: 0
+        }
+        // OOXML numeric style IDs 1-6 map directly to heading levels
+        return s.toIntOrNull()?.takeIf { it in 1..6 } ?: 0
     }
 }
