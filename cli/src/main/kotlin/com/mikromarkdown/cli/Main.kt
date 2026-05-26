@@ -1,13 +1,13 @@
 package com.mikromarkdown.cli
 
 import com.github.ajalt.clikt.core.CliktCommand
+import com.github.ajalt.clikt.core.main
 import com.github.ajalt.clikt.parameters.arguments.argument
 import com.github.ajalt.clikt.parameters.arguments.optional
 import com.github.ajalt.clikt.parameters.options.option
 import com.github.ajalt.clikt.parameters.types.path
-import com.mikromarkdown.MarkItDown
-import com.mikromarkdown.StreamInfo
-import java.io.File
+import io.github.lemcoder.mikromarkdown.MarkItDown
+import io.github.lemcoder.mikromarkdown.StreamInfo
 
 class MarkItDownCommand : CliktCommand(name = "markitdown") {
     private val file by argument("FILE", help = "Input file (reads stdin if omitted)").path(mustExist = true).optional()
@@ -19,10 +19,10 @@ class MarkItDownCommand : CliktCommand(name = "markitdown") {
         val markItDown = MarkItDown()
 
         val result = if (file != null) {
-            markItDown.convert(file!!.toFile())
+            markItDown.convert(file!!.toFile().absolutePath)
         } else {
             val info = StreamInfo(extension = extension, mimetype = mimeType)
-            markItDown.convert(System.`in`, info)
+            markItDown.convert(System.`in`.readBytes(), info)
         }
 
         if (output != null) {

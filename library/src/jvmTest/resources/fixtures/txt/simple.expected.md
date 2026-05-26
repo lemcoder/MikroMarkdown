@@ -1,4 +1,0 @@
-Hello, World!
-This is a plain text file.
-
-It has multiple paragraphs.

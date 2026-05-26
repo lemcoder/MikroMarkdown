@@ -3,9 +3,10 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.android.kotlin.multiplatform.library)
+    alias(libs.plugins.kotlinx.resources)
 }
 
-group = "com.mikromarkdown"
+group = "io.github.lemcoder"
 version = "0.1.0"
 
 kotlin {
@@ -19,7 +20,7 @@ kotlin {
     }
 
     androidLibrary {
-        namespace = "com.mikromarkdown"
+        namespace = "io.github.lemcoder.mikromarkdown"
         compileSdk = libs.versions.android.compileSdk.get().toInt()
         minSdk = libs.versions.android.minSdk.get().toInt()
 
@@ -34,46 +35,37 @@ kotlin {
     }
 
     sourceSets {
-        val jvmAndroidMain by creating {
-            dependsOn(getByName("commonMain"))
+        commonMain.dependencies {
+            implementation(libs.kotlinx.io.core)
         }
 
-        getByName("jvmMain") {
-            dependsOn(jvmAndroidMain)
-            dependencies {
-                implementation(libs.jsoup)
-                implementation(libs.flexmark.html2md)
-                implementation(libs.jackson.kotlin)
-                implementation(libs.commons.csv)
-                implementation(libs.poi.ooxml)
-                implementation(libs.tika.core)
-                implementation(libs.pdfbox)
-            }
+        jvmMain.dependencies {
+            implementation(libs.jsoup)
+            implementation(libs.flexmark.html2md)
+            implementation(libs.jackson.kotlin)
+            implementation(libs.commons.csv)
+            implementation(libs.poi.ooxml)
+            implementation(libs.tika.core)
+            implementation(libs.pdfbox)
         }
 
-        getByName("androidMain") {
-            dependsOn(jvmAndroidMain)
-            dependencies {
-                implementation(libs.jsoup)
-                implementation(libs.flexmark.html2md)
-                implementation(libs.jackson.kotlin)
-                implementation(libs.commons.csv)
-                implementation(libs.poi.ooxml)
-                implementation(libs.pdfbox.android)
-            }
+        androidMain.dependencies {
+            implementation(libs.jsoup)
+            implementation(libs.flexmark.html2md)
+            implementation(libs.jackson.kotlin)
+            implementation(libs.commons.csv)
+            implementation(libs.poi.ooxml)
+            implementation(libs.pdfbox.android)
         }
 
-        getByName("commonTest") {
-            dependencies {
-                implementation(libs.kotlin.test)
-            }
+        commonTest.dependencies {
+            implementation(libs.kotlin.test)
+            implementation(libs.kotlinx.resources)
         }
 
-        getByName("jvmTest") {
-            dependencies {
-                implementation(libs.junit.jupiter)
-                implementation(libs.kotlin.test)
-            }
+        jvmTest.dependencies {
+            implementation(libs.junit.jupiter)
+            implementation(libs.kotlin.test)
         }
     }
 }
