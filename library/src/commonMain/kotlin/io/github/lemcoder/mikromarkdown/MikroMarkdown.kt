@@ -6,18 +6,15 @@ import kotlinx.io.files.Path
 import kotlinx.io.files.SystemFileSystem
 import kotlinx.io.readByteArray
 
-class MarkItDown(
-    private val detectMime: (String) -> StreamInfo,
-    converters: List<Pair<DocumentConverter, Double>> = emptyList(),
-) {
-    private val converters = converters.toMutableList()
+class MikroMarkdown(private val mimeDetector: MimeDetector) {
+    private val converters = mutableListOf<Pair<DocumentConverter, Double>>()
 
-    fun registerConverter(converter: DocumentConverter, priority: Double = 0.0) {
-        converters.add(0, converter to priority)
+    fun register(converter: DocumentConverter, priority: Double = 0.0) {
+        converters.add(converter to priority)
     }
 
     fun convert(path: String): ConversionResult {
-        val info = detectMime(path)
+        val info = mimeDetector.detect(path)
         val bytes = SystemFileSystem.source(Path(path)).buffered().use { it.readByteArray() }
         return dispatch(bytes, info)
     }

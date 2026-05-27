@@ -1,3 +1,3 @@
 package io.github.lemcoder.mikromarkdown
 
-actual fun testMarkItDown(): MarkItDown = MarkItDown()
+actual fun testMarkItDown(): MikroMarkdown = MarkItDown()

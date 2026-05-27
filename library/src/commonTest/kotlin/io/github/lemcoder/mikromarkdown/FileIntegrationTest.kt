@@ -5,7 +5,7 @@ import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-expect fun testMarkItDown(): MarkItDown
+expect fun testMarkItDown(): MikroMarkdown
 
 class FileIntegrationTest {
     private val mid = testMarkItDown()

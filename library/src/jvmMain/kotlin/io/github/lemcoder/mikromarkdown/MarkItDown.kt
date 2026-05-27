@@ -14,21 +14,18 @@ import io.github.lemcoder.mikromarkdown.converters.XlsxConverter
 import io.github.lemcoder.mikromarkdown.converters.XmlConverter
 import java.io.File
 
-fun MarkItDown(): MarkItDown = MarkItDown(
-    detectMime = TikaMimeDetector::detect,
-    converters = listOf(
-        MarkdownPassthroughConverter() to 0.0,
-        HtmlConverter() to 0.0,
-        CsvConverter() to 0.0,
-        JsonConverter() to 0.0,
-        XmlConverter() to 0.0,
-        DocxConverter() to 0.0,
-        XlsxConverter() to 0.0,
-        PptxConverter() to 0.0,
-        EpubConverter() to 0.0,
-        PdfConverter() to 0.0,
-        PlainTextConverter() to 10.0,
-    ),
-)
+fun MarkItDown(): MikroMarkdown = MikroMarkdown(TikaMimeDetector).apply {
+    register(MarkdownPassthroughConverter())
+    register(HtmlConverter())
+    register(CsvConverter())
+    register(JsonConverter())
+    register(XmlConverter())
+    register(DocxConverter())
+    register(XlsxConverter())
+    register(PptxConverter())
+    register(EpubConverter())
+    register(PdfConverter())
+    register(PlainTextConverter(), priority = 10.0)
+}
 
-fun MarkItDown.convert(file: File): ConversionResult = convert(file.absolutePath)
+fun MikroMarkdown.convert(file: File): ConversionResult = convert(file.absolutePath)

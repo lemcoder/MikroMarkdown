@@ -16,24 +16,21 @@ import io.github.lemcoder.mikromarkdown.converters.XmlConverter
 import io.github.lemcoder.mikromarkdown.utils.AndroidMimeDetector
 import java.io.File
 
-fun MarkItDown(context: Context? = null): MarkItDown = MarkItDown(
-    detectMime = AndroidMimeDetector::detect,
-    converters = buildList {
-        add(MarkdownPassthroughConverter() to 0.0)
-        add(HtmlConverter() to 0.0)
-        add(CsvConverter() to 0.0)
-        add(JsonConverter() to 0.0)
-        add(XmlConverter() to 0.0)
-        add(DocxConverter() to 0.0)
-        add(XlsxConverter() to 0.0)
-        add(PptxConverter() to 0.0)
-        add(EpubConverter() to 0.0)
-        if (context != null) {
-            PDFBoxResourceLoader.init(context)
-            add(PdfConverter() to 0.0)
-        }
-        add(PlainTextConverter() to 10.0)
-    },
-)
+fun MarkItDown(context: Context? = null): MikroMarkdown = MikroMarkdown(AndroidMimeDetector).apply {
+    register(MarkdownPassthroughConverter())
+    register(HtmlConverter())
+    register(CsvConverter())
+    register(JsonConverter())
+    register(XmlConverter())
+    register(DocxConverter())
+    register(XlsxConverter())
+    register(PptxConverter())
+    register(EpubConverter())
+    if (context != null) {
+        PDFBoxResourceLoader.init(context)
+        register(PdfConverter())
+    }
+    register(PlainTextConverter(), priority = 10.0)
+}
 
-fun MarkItDown.convert(file: File): ConversionResult = convert(file.absolutePath)
+fun MikroMarkdown.convert(file: File): ConversionResult = convert(file.absolutePath)
