@@ -6,6 +6,7 @@ import io.github.lemcoder.mikromarkdown.StreamInfo
 import org.apache.poi.xwpf.usermodel.XWPFDocument
 import org.apache.poi.xwpf.usermodel.XWPFParagraph
 import org.apache.poi.xwpf.usermodel.XWPFTable
+import java.util.Base64
 
 class DocxConverter : DocumentConverter {
     override fun accepts(bytes: ByteArray, info: StreamInfo): Boolean {
@@ -27,6 +28,7 @@ class DocxConverter : DocumentConverter {
                             title = element.text
                         }
                         sb.appendLine(md)
+                        sb.appendLine()
                     }
                 }
                 is XWPFTable -> {
@@ -44,6 +46,20 @@ class DocxConverter : DocumentConverter {
 
     private fun convertParagraph(para: XWPFParagraph): String {
         val rawText = para.runs.joinToString("") { run ->
+            val pics = run.embeddedPictures
+            if (pics.isNotEmpty()) {
+                return@joinToString pics.joinToString("") { pic ->
+                    val descr = pic.description ?: ""
+                    val data = pic.pictureData
+                    if (data != null) {
+                        val mime = data.pictureTypeEnum.contentType
+                        val b64 = Base64.getEncoder().encodeToString(data.data)
+                        "![$descr](data:$mime;base64,$b64)"
+                    } else {
+                        "![$descr]()"
+                    }
+                }
+            }
             var text = run.text() ?: ""
             if (text.isBlank()) return@joinToString text
             when {

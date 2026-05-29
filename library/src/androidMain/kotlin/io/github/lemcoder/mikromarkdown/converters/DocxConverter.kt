@@ -1,5 +1,6 @@
 package io.github.lemcoder.mikromarkdown.converters
 
+import java.util.Base64
 import io.github.lemcoder.mikromarkdown.ConversionResult
 import io.github.lemcoder.mikromarkdown.DocumentConverter
 import io.github.lemcoder.mikromarkdown.StreamInfo
@@ -27,6 +28,7 @@ class DocxConverter : DocumentConverter {
                             title = element.text
                         }
                         sb.appendLine(md)
+                        sb.appendLine()
                     }
                 }
                 is XWPFTable -> {
@@ -44,6 +46,20 @@ class DocxConverter : DocumentConverter {
 
     private fun convertParagraph(para: XWPFParagraph): String {
         val rawText = para.runs.joinToString("") { run ->
+            val pics = run.embeddedPictures
+            if (pics.isNotEmpty()) {
+                return@joinToString pics.joinToString("") { pic ->
+                    val descr = pic.description ?: ""
+                    val data = pic.pictureData
+                    if (data != null) {
+                        val mime = data.pictureTypeEnum.contentType
+                        val b64 = Base64.getEncoder().encodeToString(data.data)
+                        "![$descr](data:$mime;base64,$b64)"
+                    } else {
+                        "![$descr]()"
+                    }
+                }
+            }
             var text = run.text() ?: ""
             if (text.isBlank()) return@joinToString text
             when {

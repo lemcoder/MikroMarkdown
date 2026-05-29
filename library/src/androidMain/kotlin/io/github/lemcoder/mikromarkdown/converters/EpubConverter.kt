@@ -29,7 +29,12 @@ class EpubConverter : DocumentConverter {
         val sb = StringBuilder()
         var title: String? = metadata["title"]
 
-        metadata["description"]?.let { sb.appendLine(it).appendLine() }
+        val metaFields = listOf("title" to "Title", "creator" to "Authors", "language" to "Language",
+            "description" to "Description", "identifier" to "Identifier")
+        for ((key, label) in metaFields) {
+            metadata[key]?.let { sb.appendLine("**$label:** $it") }
+        }
+        if (sb.isNotEmpty()) sb.appendLine()
 
         for (idref in spine) {
             val href = manifest[idref] ?: continue
@@ -73,7 +78,7 @@ class EpubConverter : DocumentConverter {
         val doc = parseXml(opfBytes) ?: return Triple(emptyMap(), emptyList(), emptyMap())
 
         val metadata = mutableMapOf<String, String>()
-        for (tag in listOf("dc:title", "dc:description")) {
+        for (tag in listOf("dc:title", "dc:creator", "dc:language", "dc:description", "dc:identifier")) {
             val nodes = doc.getElementsByTagName(tag)
             if (nodes.length > 0) {
                 val text = nodes.item(0).textContent?.trim()

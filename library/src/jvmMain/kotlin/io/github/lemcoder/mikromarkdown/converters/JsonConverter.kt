@@ -1,17 +1,25 @@
 package io.github.lemcoder.mikromarkdown.converters
 
+import com.fasterxml.jackson.core.JsonGenerator
+import com.fasterxml.jackson.core.util.DefaultIndenter
+import com.fasterxml.jackson.core.util.DefaultPrettyPrinter
 import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.databind.SerializationFeature
 import com.fasterxml.jackson.module.kotlin.registerKotlinModule
 import io.github.lemcoder.mikromarkdown.ConversionResult
 import io.github.lemcoder.mikromarkdown.DocumentConverter
 import io.github.lemcoder.mikromarkdown.StreamInfo
 
 class JsonConverter : DocumentConverter {
-    private val mapper = ObjectMapper().apply {
+    private val writer = ObjectMapper().apply {
         registerKotlinModule()
-        enable(SerializationFeature.INDENT_OUTPUT)
-    }
+    }.writer(object : DefaultPrettyPrinter() {
+        init {
+            indentArraysWith(DefaultIndenter("    ", "\n"))
+            indentObjectsWith(DefaultIndenter("    ", "\n"))
+        }
+        override fun createInstance() = this
+        override fun writeObjectFieldValueSeparator(g: JsonGenerator) = g.writeRaw(": ")
+    })
 
     override fun accepts(bytes: ByteArray, info: StreamInfo): Boolean {
         return info.extension == "json" || info.mimetype in setOf("application/json", "text/json")
@@ -20,11 +28,11 @@ class JsonConverter : DocumentConverter {
     override fun convert(bytes: ByteArray, info: StreamInfo): ConversionResult {
         val json = bytes.toString(Charsets.UTF_8)
         val pretty = try {
-            val node = mapper.readTree(json)
-            mapper.writeValueAsString(node)
+            val node = ObjectMapper().readTree(json)
+            writer.writeValueAsString(node)
         } catch (_: Exception) {
             json
         }
-        return ConversionResult(markdown = "```json\n$pretty\n```")
+        return ConversionResult(markdown = pretty)
     }
 }
