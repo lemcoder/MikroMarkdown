@@ -1,3 +1,6 @@
 [submodule "markitdown"]
 	path = markitdown
 	url = https://github.com/microsoft/markitdown
+[submodule "anydoc"]
+	path = anydoc
+	url = https://github.com/firecrawl/anydoc.git
