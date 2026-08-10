@@ -8,18 +8,18 @@ import io.github.lemcoder.mikromarkdown.model.Heading
 import io.github.lemcoder.mikromarkdown.model.Table
 import io.github.lemcoder.mikromarkdown.model.TableCell
 import io.github.lemcoder.mikromarkdown.model.Text
+import kotlin.math.floor
 import org.apache.poi.ss.usermodel.Cell
 import org.apache.poi.ss.usermodel.CellType
 import org.apache.poi.ss.usermodel.DataFormatter
 import org.apache.poi.xssf.usermodel.XSSFWorkbook
-import kotlin.math.floor
 
 class XlsxConverter : DocumentConverter {
     private val formatter = DataFormatter()
 
     override fun accepts(bytes: ByteArray, info: StreamInfo): Boolean {
         return info.extension == "xlsx" ||
-               info.mimetype == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            info.mimetype == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     }
 
     override fun parse(bytes: ByteArray, info: StreamInfo): Document {
@@ -35,12 +35,12 @@ class XlsxConverter : DocumentConverter {
                 if (columns == 0) continue
 
                 blocks += Heading(2, listOf(Text(sheet.sheetName)))
-                blocks += Table(
-                    header = (0 until columns).map { TableCell(cellValue(rows[0].getCell(it))) },
-                    rows = rows.drop(1).map { row ->
-                        (0 until columns).map { TableCell(cellValue(row.getCell(it))) }
-                    },
-                )
+                blocks +=
+                    Table(
+                        header = (0 until columns).map { TableCell(cellValue(rows[0].getCell(it))) },
+                        rows =
+                            rows.drop(1).map { row -> (0 until columns).map { TableCell(cellValue(row.getCell(it))) } },
+                    )
             }
 
             return Document(blocks = blocks)
@@ -54,8 +54,7 @@ class XlsxConverter : DocumentConverter {
         return when (cell.cellType) {
             CellType.NUMERIC -> {
                 val v = cell.numericCellValue
-                if (v == floor(v) && !v.isInfinite()) v.toLong().toString()
-                else formatter.formatCellValue(cell)
+                if (v == floor(v) && !v.isInfinite()) v.toLong().toString() else formatter.formatCellValue(cell)
             }
             CellType.BLANK -> ""
             else -> formatter.formatCellValue(cell).trim()

@@ -8,20 +8,21 @@ import io.github.lemcoder.mikromarkdown.model.Paragraph
 import io.github.lemcoder.mikromarkdown.model.Strong
 import io.github.lemcoder.mikromarkdown.model.Text
 import io.github.lemcoder.mikromarkdown.utils.HtmlToDocument
-import org.w3c.dom.Element
-import org.xml.sax.InputSource
 import java.io.StringReader
 import java.util.zip.ZipInputStream
 import javax.xml.parsers.DocumentBuilderFactory
+import org.w3c.dom.Element
+import org.xml.sax.InputSource
 
 class EpubConverter : DocumentConverter {
-    private val metaFields = listOf(
-        "title" to "Title",
-        "creator" to "Authors",
-        "language" to "Language",
-        "description" to "Description",
-        "identifier" to "Identifier",
-    )
+    private val metaFields =
+        listOf(
+            "title" to "Title",
+            "creator" to "Authors",
+            "language" to "Language",
+            "description" to "Description",
+            "identifier" to "Identifier",
+        )
 
     override fun accepts(bytes: ByteArray, info: StreamInfo): Boolean {
         return info.extension == "epub" || info.mimetype == "application/epub+zip"
@@ -100,8 +101,7 @@ class EpubConverter : DocumentConverter {
             val id = item.getAttribute("id")
             val href = item.getAttribute("href")
             val mediaType = item.getAttribute("media-type")
-            if (id.isNotEmpty() && href.isNotEmpty() &&
-                (mediaType.contains("html") || mediaType.contains("xhtml"))) {
+            if (id.isNotEmpty() && href.isNotEmpty() && isReadableChapter(mediaType)) {
                 manifest[id] = href
             }
         }
@@ -117,12 +117,16 @@ class EpubConverter : DocumentConverter {
         return Triple(manifest, spine, metadata)
     }
 
-    private fun parseXml(bytes: ByteArray) = try {
-        val factory = DocumentBuilderFactory.newInstance()
-        factory.isNamespaceAware = false
-        factory.isExpandEntityReferences = false
-        factory.newDocumentBuilder().parse(InputSource(StringReader(bytes.toString(Charsets.UTF_8))))
-    } catch (_: Exception) {
-        null
-    }
+    /** Only the spine's (X)HTML documents carry text; images and styles are skipped. */
+    private fun isReadableChapter(mediaType: String): Boolean = mediaType.contains("html")
+
+    private fun parseXml(bytes: ByteArray) =
+        try {
+            val factory = DocumentBuilderFactory.newInstance()
+            factory.isNamespaceAware = false
+            factory.isExpandEntityReferences = false
+            factory.newDocumentBuilder().parse(InputSource(StringReader(bytes.toString(Charsets.UTF_8))))
+        } catch (_: Exception) {
+            null
+        }
 }

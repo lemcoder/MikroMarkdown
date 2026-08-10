@@ -9,5 +9,6 @@ import io.github.lemcoder.mikromarkdown.model.Document
  */
 interface DocumentConverter {
     fun accepts(bytes: ByteArray, info: StreamInfo): Boolean
+
     fun parse(bytes: ByteArray, info: StreamInfo): Document
 }

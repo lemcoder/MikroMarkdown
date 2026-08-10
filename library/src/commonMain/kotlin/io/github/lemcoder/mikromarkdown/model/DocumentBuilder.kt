@@ -84,16 +84,17 @@ class DocumentBuilder {
                 header = header.map { TableCell(it) },
                 rows = rows.map { row -> row.map { TableCell(it) } },
                 alignments = alignments,
-            ),
+            )
         )
     }
 
-    fun build(): Document = Document(
-        blocks = blocks.toList(),
-        title = title,
-        metadata = metadata.toMap(),
-        assets = assets.toList(),
-    )
+    fun build(): Document =
+        Document(
+            blocks = blocks.toList(),
+            title = title,
+            metadata = metadata.toMap(),
+            assets = assets.toList(),
+        )
 }
 
 /** Builds a list of inlines without repeating `listOf(...)` wrappers in parsers. */

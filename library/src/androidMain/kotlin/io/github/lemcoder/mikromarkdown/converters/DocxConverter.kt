@@ -16,15 +16,15 @@ import io.github.lemcoder.mikromarkdown.model.TableCell
 import io.github.lemcoder.mikromarkdown.model.Text
 import io.github.lemcoder.mikromarkdown.model.plainText
 import io.github.lemcoder.mikromarkdown.model.styled
+import java.util.Base64
 import org.apache.poi.xwpf.usermodel.XWPFDocument
 import org.apache.poi.xwpf.usermodel.XWPFParagraph
 import org.apache.poi.xwpf.usermodel.XWPFTable
-import java.util.Base64
 
 class DocxConverter : DocumentConverter {
     override fun accepts(bytes: ByteArray, info: StreamInfo): Boolean {
         return info.extension == "docx" ||
-               info.mimetype == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            info.mimetype == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     }
 
     override fun parse(bytes: ByteArray, info: StreamInfo): Document {
@@ -94,11 +94,12 @@ class DocxConverter : DocumentConverter {
                     val mime = data.pictureTypeEnum.contentType
                     val id = data.fileName ?: "image-${assets.size + 1}"
                     assets += Asset(id = id, mediaType = mime, bytes = data.data, name = data.fileName)
-                    out += Image(
-                        alt = alt,
-                        url = "data:$mime;base64,${Base64.getEncoder().encodeToString(data.data)}",
-                        assetId = id,
-                    )
+                    out +=
+                        Image(
+                            alt = alt,
+                            url = "data:$mime;base64,${Base64.getEncoder().encodeToString(data.data)}",
+                            assetId = id,
+                        )
                 }
                 continue
             }
@@ -126,11 +127,12 @@ class DocxConverter : DocumentConverter {
                     itemLevel < level -> break
                     itemLevel == level -> {
                         index++
-                        val children = if (index < items.size && items[index].first > level) {
-                            listOf(ListBlock(ordered = false, items = build(items[index].first)))
-                        } else {
-                            emptyList()
-                        }
+                        val children =
+                            if (index < items.size && items[index].first > level) {
+                                listOf(ListBlock(ordered = false, items = build(items[index].first)))
+                            } else {
+                                emptyList()
+                            }
                         result += ListItem(listOf(Paragraph(content)) + children)
                     }
                     // A deeper first item without a parent: promote it to this level.

@@ -128,6 +128,21 @@ mid.register(HtmlConverter())
 
 Both extend `MikroMarkdownException`.
 
+## Code quality
+
+| tool | task | what it guards |
+|---|---|---|
+| [ktfmt](https://github.com/facebook/ktfmt) | `./gradlew ktfmtFormat` / `ktfmtCheck` | formatting (kotlinlang style, 120 columns) |
+| [detekt](https://detekt.dev) | `./gradlew detekt` | static analysis; overrides in `config/detekt/detekt.yml` |
+| [Konsist](https://docs.konsist.lemonappdev.com) | `./gradlew :library:jvmTest --tests '*ArchitectureTest*'` | pipeline boundaries |
+
+`./gradlew check` runs all three. The Konsist rules encode the architecture: the model depends on
+nothing, converters never import the renderer, and Markdown syntax appears only under `render/` —
+so a converter cannot quietly start building Markdown strings again.
+
+ktfmt-gradle only derives tasks for the common and JVM source sets, so `library/build.gradle.kts`
+registers matching tasks for the Android ones.
+
 ## Benchmark
 
 `scripts/benchmark.py` converts the test fixtures with MikroMarkdown, Python

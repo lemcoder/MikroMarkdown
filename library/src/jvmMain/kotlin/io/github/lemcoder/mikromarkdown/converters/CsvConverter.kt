@@ -5,9 +5,9 @@ import io.github.lemcoder.mikromarkdown.StreamInfo
 import io.github.lemcoder.mikromarkdown.model.Document
 import io.github.lemcoder.mikromarkdown.model.Table
 import io.github.lemcoder.mikromarkdown.model.TableCell
+import java.io.InputStreamReader
 import org.apache.commons.csv.CSVFormat
 import org.apache.commons.csv.CSVParser
-import java.io.InputStreamReader
 
 class CsvConverter : DocumentConverter {
     override fun accepts(bytes: ByteArray, info: StreamInfo): Boolean {
@@ -22,10 +22,11 @@ class CsvConverter : DocumentConverter {
         val header = records[0].toList()
         if (header.isEmpty()) return Document()
 
-        val rows = records.drop(1).map { record ->
-            // Ragged rows are padded by the renderer; only extra columns need trimming here.
-            List(header.size) { col -> TableCell(record.takeIf { col < it.size() }?.get(col) ?: "") }
-        }
+        val rows =
+            records.drop(1).map { record ->
+                // Ragged rows are padded by the renderer; only extra columns need trimming here.
+                List(header.size) { col -> TableCell(record.takeIf { col < it.size() }?.get(col) ?: "") }
+            }
 
         return Document(blocks = listOf(Table(header = header.map { TableCell(it) }, rows = rows)))
     }

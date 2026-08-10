@@ -18,11 +18,12 @@ class PdfConverter : DocumentConverter {
             val title = doc.documentInformation?.title?.trim()?.ifBlank { null }
             // Paragraph markers let the text blocks split on real paragraph breaks
             // instead of collapsing a page into one block.
-            val stripper = PDFTextStripper().apply {
-                sortByPosition = true
-                setAddMoreFormatting(true)
-                paragraphStart = "\n"
-            }
+            val stripper =
+                PDFTextStripper().apply {
+                    sortByPosition = true
+                    setAddMoreFormatting(true)
+                    paragraphStart = "\n"
+                }
             return Document(blocks = plainTextBlocks(stripper.getText(doc)), title = title)
         } finally {
             doc.close()

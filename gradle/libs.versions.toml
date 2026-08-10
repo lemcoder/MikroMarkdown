@@ -17,6 +17,9 @@ poi = "5.5.1"
 tika = "3.3.0"
 clikt = "5.1.0"
 coreKtx = "1.7.0"
+detekt = "1.23.8"
+ktfmt = "0.27.0"
+konsist = "0.17.3"
 
 [libraries]
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
@@ -33,6 +36,7 @@ poi-ooxml = { module = "org.apache.poi:poi-ooxml", version.ref = "poi" }
 tika-core = { module = "org.apache.tika:tika-core", version.ref = "tika" }
 clikt = { module = "com.github.ajalt.clikt:clikt", version.ref = "clikt" }
 core-ktx = { group = "androidx.test", name = "core-ktx", version.ref = "coreKtx" }
+konsist = { module = "com.lemonappdev:konsist", version.ref = "konsist" }
 
 [plugins]
 android-kotlin-multiplatform-library = { id = "com.android.kotlin.multiplatform.library", version.ref = "agp" }
@@ -40,3 +44,5 @@ kotlinMultiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref =
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 vanniktech-mavenPublish = { id = "com.vanniktech.maven.publish", version.ref = "vanniktechMavenPublish" }
 kotlinx-resources = { id = "com.goncalossilva.resources", version.ref = "kotlinx-resources" }
+detekt = { id = "io.gitlab.arturbosch.detekt", version.ref = "detekt" }
+ktfmt = { id = "com.ncorti.ktfmt.gradle", version.ref = "ktfmt" }

@@ -1,0 +1,48 @@
+# Overrides on top of detekt's default config (buildUponDefaultConfig = true).
+# Only rules that clash with deliberate choices in this codebase are relaxed.
+
+build:
+  maxIssues: 0
+
+complexity:
+  # Parsers walk large format-specific type hierarchies; splitting them further hurts readability.
+  CyclomaticComplexMethod:
+    threshold: 25
+  LongMethod:
+    threshold: 90
+  LongParameterList:
+    functionThreshold: 8
+    constructorThreshold: 10
+  NestedBlockDepth:
+    threshold: 6
+  TooManyFunctions:
+    thresholdInFiles: 30
+    thresholdInClasses: 30
+    thresholdInObjects: 30
+    ignorePrivate: true
+
+exceptions:
+  # Format libraries throw broadly; converters degrade gracefully rather than propagate.
+  TooGenericExceptionCaught:
+    active: false
+  SwallowedException:
+    active: false
+
+naming:
+  FunctionNaming:
+    # Factory functions mirror the type they build: MikroMarkdown(), document {}.
+    functionPattern: '[a-zA-Z][a-zA-Z0-9]*'
+
+style:
+  MagicNumber:
+    active: false
+  MaxLineLength:
+    maxLineLength: 120
+  ReturnCount:
+    max: 6
+  ForbiddenComment:
+    active: false
+  UnusedPrivateMember:
+    active: true
+  LoopWithTooManyJumpStatements:
+    maxJumpCount: 4

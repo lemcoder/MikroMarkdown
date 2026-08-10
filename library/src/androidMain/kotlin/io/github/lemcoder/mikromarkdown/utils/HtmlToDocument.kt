@@ -29,22 +29,49 @@ import org.jsoup.nodes.TextNode
 /**
  * Walks an HTML DOM into the shared document model.
  *
- * Replaces the previous HTML → Markdown string conversion: tables, lists and inline
- * emphasis become model nodes, so the Markdown renderer owns all syntax decisions.
+ * Replaces the previous HTML → Markdown string conversion: tables, lists and inline emphasis become model nodes, so the
+ * Markdown renderer owns all syntax decisions.
  */
 object HtmlToDocument {
 
-    private val DROPPED_TAGS = setOf(
-        "script", "style", "noscript", "template", "button", "svg", "iframe", "form", "input", "select",
-    )
+    private val DROPPED_TAGS =
+        setOf(
+            "script",
+            "style",
+            "noscript",
+            "template",
+            "button",
+            "svg",
+            "iframe",
+            "form",
+            "input",
+            "select",
+        )
 
     private val HEADINGS = mapOf("h1" to 1, "h2" to 2, "h3" to 3, "h4" to 4, "h5" to 5, "h6" to 6)
 
     /** Tags that only group other content; their children are lifted into the parent block flow. */
-    private val CONTAINERS = setOf(
-        "div", "section", "article", "main", "header", "footer", "aside", "nav", "body", "html",
-        "figure", "details", "summary", "fieldset", "center", "hgroup", "picture", "colgroup",
-    )
+    private val CONTAINERS =
+        setOf(
+            "div",
+            "section",
+            "article",
+            "main",
+            "header",
+            "footer",
+            "aside",
+            "nav",
+            "body",
+            "html",
+            "figure",
+            "details",
+            "summary",
+            "fieldset",
+            "center",
+            "hgroup",
+            "picture",
+            "colgroup",
+        )
 
     fun parse(html: String, baseUri: String = ""): Document {
         val doc = Jsoup.parse(html, baseUri)
@@ -91,49 +118,66 @@ object HtmlToDocument {
         return out
     }
 
-    private fun Element.isBlockLevel(): Boolean = when (tagName()) {
-        in HEADINGS, "p", "ul", "ol", "table", "pre", "blockquote", "hr", "dl", "li", "figcaption" -> true
-        in CONTAINERS -> true
-        else -> false
-    }
+    private fun Element.isBlockLevel(): Boolean =
+        when (tagName()) {
+            in HEADINGS,
+            "p",
+            "ul",
+            "ol",
+            "table",
+            "pre",
+            "blockquote",
+            "hr",
+            "dl",
+            "li",
+            "figcaption" -> true
+            in CONTAINERS -> true
+            else -> false
+        }
 
-    private fun blockFor(element: Element): List<Block> = when (val tag = element.tagName()) {
-        in HEADINGS -> listOfNotNull(
-            inlines(element).trimEdges()
-                .takeIf { it.isNotEmpty() }
-                ?.let { Heading(HEADINGS.getValue(tag), it, element.id().ifBlank { null }) },
-        )
+    private fun blockFor(element: Element): List<Block> =
+        when (val tag = element.tagName()) {
+            in HEADINGS ->
+                listOfNotNull(
+                    inlines(element)
+                        .trimEdges()
+                        .takeIf { it.isNotEmpty() }
+                        ?.let { Heading(HEADINGS.getValue(tag), it, element.id().ifBlank { null }) }
+                )
 
-        "p" -> listOfNotNull(inlines(element).trimEdges().takeIf { it.isNotEmpty() }?.let { Paragraph(it) })
-        "ul", "ol" -> listBlock(element)
-        "table" -> table(element)
-        "pre" -> listOf(codeBlock(element))
-        "blockquote" -> blocks(element).takeIf { it.isNotEmpty() }?.let { listOf(BlockQuote(it)) } ?: emptyList()
-        "hr" -> listOf(ThematicBreak)
-        "dl" -> definitionList(element)
-        "figcaption" -> listOfNotNull(
-            inlines(element).trimEdges().takeIf { it.isNotEmpty() }?.let { Paragraph(listOf(Emphasis(it))) },
-        )
-        // Containers and stray <li> outside a list contribute their children directly.
-        else -> blocks(element)
-    }
+            "p" -> listOfNotNull(inlines(element).trimEdges().takeIf { it.isNotEmpty() }?.let { Paragraph(it) })
+            "ul",
+            "ol" -> listBlock(element)
+            "table" -> table(element)
+            "pre" -> listOf(codeBlock(element))
+            "blockquote" -> blocks(element).takeIf { it.isNotEmpty() }?.let { listOf(BlockQuote(it)) } ?: emptyList()
+            "hr" -> listOf(ThematicBreak)
+            "dl" -> definitionList(element)
+            "figcaption" ->
+                listOfNotNull(
+                    inlines(element).trimEdges().takeIf { it.isNotEmpty() }?.let { Paragraph(listOf(Emphasis(it))) }
+                )
+            // Containers and stray <li> outside a list contribute their children directly.
+            else -> blocks(element)
+        }
 
     private fun listBlock(element: Element): List<Block> {
         val ordered = element.tagName() == "ol"
         val start = element.attr("start").toIntOrNull() ?: 1
-        val items = element.children()
-            .filter { it.tagName() == "li" }
-            .map { li -> ListItem(blocks = blocks(li)) }
-            .filter { it.blocks.isNotEmpty() }
+        val items =
+            element
+                .children()
+                .filter { it.tagName() == "li" }
+                .map { li -> ListItem(blocks = blocks(li)) }
+                .filter { it.blocks.isNotEmpty() }
         if (items.isEmpty()) return emptyList()
         return listOf(ListBlock(ordered = ordered, items = items, start = start))
     }
 
     private fun codeBlock(element: Element): Block {
         val code = element.selectFirst("code") ?: element
-        val language = code.classNames()
-            .firstOrNull { it.startsWith("language-") || it.startsWith("lang-") }
-            ?.substringAfter('-')
+        val language =
+            code.classNames().firstOrNull { it.startsWith("language-") || it.startsWith("lang-") }?.substringAfter('-')
         return CodeBlock(code.wholeText().trimEnd(), language)
     }
 
@@ -158,20 +202,22 @@ object HtmlToDocument {
         val body = mutableListOf<List<TableCell>>()
 
         for ((index, tr) in rows.withIndex()) {
-            val cells = tr.children()
-                .filter { it.tagName() == "th" || it.tagName() == "td" }
-                .map { cell ->
-                    TableCell(
-                        content = inlines(cell).trimEdges(),
-                        colSpan = cell.attr("colspan").toIntOrNull()?.coerceIn(1, 100) ?: 1,
-                        rowSpan = cell.attr("rowspan").toIntOrNull()?.coerceIn(1, 100) ?: 1,
-                    )
-                }
+            val cells =
+                tr.children()
+                    .filter { it.tagName() == "th" || it.tagName() == "td" }
+                    .map { cell ->
+                        TableCell(
+                            content = inlines(cell).trimEdges(),
+                            colSpan = cell.attr("colspan").toIntOrNull()?.coerceIn(1, 100) ?: 1,
+                            rowSpan = cell.attr("rowspan").toIntOrNull()?.coerceIn(1, 100) ?: 1,
+                        )
+                    }
             if (cells.isEmpty()) continue
 
-            val isHeaderRow = index == 0 &&
-                tr.children().all { it.tagName() == "th" } &&
-                (tr.parent()?.tagName() == "thead" || header.isEmpty())
+            val isHeaderRow =
+                index == 0 &&
+                    tr.children().all { it.tagName() == "th" } &&
+                    (tr.parent()?.tagName() == "thead" || header.isEmpty())
 
             if (isHeaderRow && header.isEmpty()) header = cells else body += cells
         }
@@ -196,35 +242,45 @@ object HtmlToDocument {
                 if (text.isNotEmpty()) add(Text(text))
             }
 
-            is Element -> when (node.tagName()) {
-                "br" -> add(LineBreak)
-                "img" -> {
-                    val src = node.attr("abs:src").ifBlank { node.attr("src") }
-                    val alt = node.attr("alt")
-                    if (src.isNotBlank()) add(Image(alt, src, node.attr("title").ifBlank { null }))
-                }
-
-                "a" -> {
-                    val href = node.attr("abs:href").ifBlank { node.attr("href") }
-                    val content = inlines(node).trimEdges()
-                    when {
-                        content.isEmpty() -> Unit
-                        href.isBlank() || href.startsWith("javascript:") -> addAll(content)
-                        else -> add(Link(content, href, node.attr("title").ifBlank { null }))
+            is Element ->
+                when (node.tagName()) {
+                    "br" -> add(LineBreak)
+                    "img" -> {
+                        val src = node.attr("abs:src").ifBlank { node.attr("src") }
+                        val alt = node.attr("alt")
+                        if (src.isNotBlank()) add(Image(alt, src, node.attr("title").ifBlank { null }))
                     }
-                }
 
-                "strong", "b" -> wrapped(node) { Strong(it) }
-                "em", "i", "cite", "var" -> wrapped(node) { Emphasis(it) }
-                "del", "s", "strike" -> wrapped(node) { Strikethrough(it) }
-                "code", "kbd", "samp", "tt" -> {
-                    val code = node.wholeText().trim()
-                    if (code.isNotEmpty()) add(CodeSpan(code))
-                }
+                    "a" -> {
+                        val href = node.attr("abs:href").ifBlank { node.attr("href") }
+                        val content = inlines(node).trimEdges()
+                        when {
+                            content.isEmpty() -> Unit
+                            href.isBlank() || href.startsWith("javascript:") -> addAll(content)
+                            else -> add(Link(content, href, node.attr("title").ifBlank { null }))
+                        }
+                    }
 
-                // Block-level content encountered inline (e.g. a <div> inside a <td>): keep its text.
-                else -> addAll(inlines(node))
-            }
+                    "strong",
+                    "b" -> wrapped(node) { Strong(it) }
+                    "em",
+                    "i",
+                    "cite",
+                    "var" -> wrapped(node) { Emphasis(it) }
+                    "del",
+                    "s",
+                    "strike" -> wrapped(node) { Strikethrough(it) }
+                    "code",
+                    "kbd",
+                    "samp",
+                    "tt" -> {
+                        val code = node.wholeText().trim()
+                        if (code.isNotEmpty()) add(CodeSpan(code))
+                    }
+
+                    // Block-level content encountered inline (e.g. a <div> inside a <td>): keep its text.
+                    else -> addAll(inlines(node))
+                }
         }
     }
 
@@ -239,14 +295,11 @@ object HtmlToDocument {
 
     /** HTML collapses runs of whitespace; do the same before the text reaches the model. */
     // Non-breaking spaces are not collapsible whitespace in HTML, so they survive verbatim.
-    private fun TextNode.normalizedText(): String =
-        wholeText.replace(Regex("\\s+"), " ")
+    private fun TextNode.normalizedText(): String = wholeText.replace(Regex("\\s+"), " ")
 
-    private fun List<Inline>.startsWithSpace(): Boolean =
-        (firstOrNull() as? Text)?.value?.startsWith(" ") == true
+    private fun List<Inline>.startsWithSpace(): Boolean = (firstOrNull() as? Text)?.value?.startsWith(" ") == true
 
-    private fun List<Inline>.endsWithSpace(): Boolean =
-        (lastOrNull() as? Text)?.value?.endsWith(" ") == true
+    private fun List<Inline>.endsWithSpace(): Boolean = (lastOrNull() as? Text)?.value?.endsWith(" ") == true
 
     /** Drops leading/trailing whitespace-only text so emphasis markers hug their content. */
     private fun List<Inline>.trimEdges(): List<Inline> {
