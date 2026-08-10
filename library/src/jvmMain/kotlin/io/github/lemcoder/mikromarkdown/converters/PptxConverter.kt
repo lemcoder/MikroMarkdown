@@ -1,16 +1,28 @@
 package io.github.lemcoder.mikromarkdown.converters
 
-import io.github.lemcoder.mikromarkdown.ConversionResult
 import io.github.lemcoder.mikromarkdown.DocumentConverter
 import io.github.lemcoder.mikromarkdown.StreamInfo
+import io.github.lemcoder.mikromarkdown.model.Block
+import io.github.lemcoder.mikromarkdown.model.Document
+import io.github.lemcoder.mikromarkdown.model.Heading
+import io.github.lemcoder.mikromarkdown.model.HtmlComment
+import io.github.lemcoder.mikromarkdown.model.Image
+import io.github.lemcoder.mikromarkdown.model.ListBlock
+import io.github.lemcoder.mikromarkdown.model.ListItem
+import io.github.lemcoder.mikromarkdown.model.Paragraph
+import io.github.lemcoder.mikromarkdown.model.Table
+import io.github.lemcoder.mikromarkdown.model.TableCell
+import io.github.lemcoder.mikromarkdown.model.Text
 import org.apache.poi.sl.usermodel.Placeholder
+import org.apache.poi.sl.usermodel.Shape
+import org.apache.poi.xslf.usermodel.XMLSlideShow
+import org.apache.poi.xslf.usermodel.XSLFChart
 import org.apache.poi.xslf.usermodel.XSLFGraphicFrame
 import org.apache.poi.xslf.usermodel.XSLFGroupShape
 import org.apache.poi.xslf.usermodel.XSLFPictureShape
 import org.apache.poi.xslf.usermodel.XSLFSimpleShape
 import org.apache.poi.xslf.usermodel.XSLFTable
 import org.apache.poi.xslf.usermodel.XSLFTextShape
-import org.apache.poi.xslf.usermodel.XMLSlideShow
 import org.openxmlformats.schemas.drawingml.x2006.chart.CTAxDataSource
 import org.openxmlformats.schemas.drawingml.x2006.chart.CTNumDataSource
 import org.openxmlformats.schemas.drawingml.x2006.chart.CTSerTx
@@ -22,204 +34,205 @@ class PptxConverter : DocumentConverter {
                info.mimetype == "application/vnd.openxmlformats-officedocument.presentationml.presentation"
     }
 
-    override fun convert(bytes: ByteArray, info: StreamInfo): ConversionResult {
+    override fun parse(bytes: ByteArray, info: StreamInfo): Document {
         val slideShow = XMLSlideShow(bytes.inputStream())
-        val sb = StringBuilder()
-        var title: String? = null
+        try {
+            val blocks = mutableListOf<Block>()
+            var title: String? = null
 
-        for ((index, slide) in slideShow.slides.withIndex()) {
-            sb.appendLine("<!-- Slide number: ${index + 1} -->")
-            processShapes(slide.shapes, sb, index == 0) { t -> if (title == null) title = t }
+            for ((index, slide) in slideShow.slides.withIndex()) {
+                blocks += HtmlComment("Slide number: ${index + 1}")
+                blocks += shapeBlocks(slide.shapes) { if (index == 0 && title == null) title = it }
 
-            // Speaker notes
-            val notes = slide.notes
-            if (notes != null) {
-                val notesText = notes.shapes
-                    .filterIsInstance<XSLFTextShape>()
-                    .filter { (it as? XSLFSimpleShape)?.placeholder != Placeholder.SLIDE_IMAGE }
-                    .joinToString("\n") { it.text }
-                    .trim()
-                if (notesText.isNotBlank()) {
-                    sb.appendLine()
-                    sb.appendLine("### Notes:")
-                    sb.appendLine(notesText)
+                val notes = slide.notes?.shapes
+                    ?.filterIsInstance<XSLFTextShape>()
+                    ?.filter { (it as? XSLFSimpleShape)?.placeholder != Placeholder.SLIDE_IMAGE }
+                    ?.joinToString("\n") { it.text }
+                    ?.trim()
+                    .orEmpty()
+                if (notes.isNotBlank()) {
+                    blocks += Heading(3, listOf(Text("Notes:")))
+                    blocks += notes.lines().filter { it.isNotBlank() }.map { Paragraph(listOf(Text(it.trim()))) }
                 }
             }
 
-            sb.appendLine()
+            return Document(blocks = blocks, title = title)
+        } finally {
+            slideShow.close()
         }
-
-        slideShow.close()
-        return ConversionResult(markdown = sb.toString(), title = title)
     }
 
-    private fun processShapes(
-        shapes: Iterable<org.apache.poi.sl.usermodel.Shape<*, *>>,
-        sb: StringBuilder,
-        isFirstSlide: Boolean,
-        onTitle: (String) -> Unit,
-    ) {
+    private fun shapeBlocks(shapes: Iterable<Shape<*, *>>, onTitle: (String) -> Unit): List<Block> {
+        val blocks = mutableListOf<Block>()
         for (shape in shapes) {
             when {
-                shape is XSLFGroupShape -> processShapes(shape.shapes, sb, isFirstSlide, onTitle)
+                shape is XSLFGroupShape -> blocks += shapeBlocks(shape.shapes, onTitle)
+
                 shape is XSLFTextShape -> {
                     val text = shape.text.trim()
                     if (text.isBlank()) continue
 
                     val placeholder = (shape as? XSLFSimpleShape)?.placeholder
-                    val isTitle = placeholder == Placeholder.TITLE ||
-                                  placeholder == Placeholder.CENTERED_TITLE
+                    if (placeholder == Placeholder.TITLE || placeholder == Placeholder.CENTERED_TITLE) {
+                        blocks += Heading(1, listOf(Text(text)))
+                        onTitle(text)
+                        continue
+                    }
 
-                    if (isTitle) {
-                        sb.appendLine("# $text")
-                        if (isFirstSlide) onTitle(text)
-                    } else {
-                        for (para in shape.textParagraphs) {
-                            val paraText = para.text.trim()
-                            if (paraText.isBlank()) continue
-                            if (para.isBullet) sb.appendLine("- $paraText")
-                            else sb.appendLine(paraText)
+                    // Consecutive bullet paragraphs become one list; plain ones stay paragraphs.
+                    val bullets = mutableListOf<ListItem>()
+                    fun flushBullets() {
+                        if (bullets.isEmpty()) return
+                        blocks += ListBlock(ordered = false, items = bullets.toList())
+                        bullets.clear()
+                    }
+                    for (para in shape.textParagraphs) {
+                        val paraText = para.text.trim()
+                        if (paraText.isBlank()) continue
+                        if (para.isBullet) {
+                            bullets += ListItem(listOf(Paragraph(listOf(Text(paraText)))))
+                        } else {
+                            flushBullets()
+                            blocks += Paragraph(listOf(Text(paraText)))
                         }
                     }
+                    flushBullets()
                 }
+
                 shape is XSLFPictureShape -> {
-                    val descr = (shape.xmlObject as? CTPicture)?.nvPicPr?.cNvPr?.descr ?: ""
-                    val altText = if (descr.isNotBlank()) descr else shape.shapeName
+                    val description = (shape.xmlObject as? CTPicture)?.nvPicPr?.cNvPr?.descr.orEmpty()
+                    val alt = description.ifBlank { shape.shapeName }
                     val filename = shape.shapeName.replace(Regex("\\W"), "") + ".jpg"
-                    sb.appendLine("![$altText]($filename)")
+                    blocks += Paragraph(listOf(Image(alt, filename)))
                 }
-                shape is XSLFGraphicFrame && shape.hasChart() -> {
-                    sb.append(convertChart(shape.chart))
-                }
-                shape is XSLFTable -> sb.appendLine(convertTable(shape))
+
+                shape is XSLFGraphicFrame && shape.hasChart() -> blocks += chartBlocks(shape.chart)
+
+                shape is XSLFTable -> table(shape)?.let { blocks += it }
             }
         }
+        return blocks
     }
 
-    private fun convertChart(chart: org.apache.poi.xslf.usermodel.XSLFChart): String {
-        val sb = StringBuilder()
-        sb.append("\n\n### Chart")
+    private fun chartBlocks(chart: XSLFChart): List<Block> {
+        val blocks = mutableListOf<Block>()
+        blocks += Heading(3, listOf(Text(listOfNotNull("Chart", chartTitle(chart)).joinToString(": "))))
 
-        try {
-            val ctChart = chart.ctChart
-            if (ctChart.isSetTitle) {
-                val tx = ctChart.title?.tx
-                val titleText = when {
-                    tx?.isSetRich == true ->
-                        tx.rich.pList.flatMap { p -> p.rList.map { r -> r.t ?: "" } }.joinToString("")
-                    tx?.isSetStrRef == true ->
-                        tx.strRef?.strCache?.ptList?.firstOrNull()?.v ?: ""
-                    else -> ""
-                }
-                if (titleText.isNotBlank()) sb.append(": $titleText")
-            }
-        } catch (_: Exception) {}
+        val series = try {
+            seriesOf(chart)
+        } catch (_: Exception) {
+            blocks += Paragraph(listOf(Text("[unsupported chart]")))
+            return blocks
+        }
+        if (series.isEmpty()) return blocks
 
-        sb.append("\n\n")
+        val rowCount = series.maxOf { it.categories.size }
+        blocks += Table(
+            header = (listOf("Category") + series.map { it.name }).map { TableCell(it) },
+            rows = (0 until rowCount).map { row ->
+                val category = series.first().categories.getOrElse(row) { "" }
+                (listOf(category) + series.map { it.values.getOrElse(row) { "" } }).map { TableCell(it) }
+            },
+        )
+        return blocks
+    }
 
-        data class SeriesData(val name: String, val categories: List<String>, val values: List<String>)
+    private fun chartTitle(chart: XSLFChart): String? = try {
+        val ctChart = chart.ctChart
+        if (!ctChart.isSetTitle) {
+            null
+        } else {
+            val tx = ctChart.title?.tx
+            when {
+                tx?.isSetRich == true ->
+                    tx.rich.pList.flatMap { p -> p.rList.map { r -> r.t.orEmpty() } }.joinToString("")
+                tx?.isSetStrRef == true -> tx.strRef?.strCache?.ptList?.firstOrNull()?.v
+                else -> null
+            }?.ifBlank { null }
+        }
+    } catch (_: Exception) {
+        null
+    }
 
-        fun catStrings(cat: CTAxDataSource?): List<String> {
-            if (cat == null) return emptyList()
-            return when {
-                cat.isSetStrRef -> cat.strRef?.strCache?.ptList?.sortedBy { it.idx }?.map { it.v } ?: emptyList()
-                cat.isSetNumRef -> cat.numRef?.numCache?.ptList?.sortedBy { it.idx }?.map { it.v ?: "" } ?: emptyList()
-                cat.isSetNumLit -> cat.numLit?.ptList?.sortedBy { it.idx }?.map { it.v ?: "" } ?: emptyList()
-                cat.isSetStrLit -> cat.strLit?.ptList?.sortedBy { it.idx }?.map { it.v } ?: emptyList()
-                else -> emptyList()
-            }
+    private data class Series(val name: String, val categories: List<String>, val values: List<String>)
+
+    private fun seriesOf(chart: XSLFChart): List<Series> {
+        val plotArea = chart.ctChart.plotArea
+        val out = mutableListOf<Series>()
+
+        fun categoryValues(cat: CTAxDataSource?): List<String> = when {
+            cat == null -> emptyList()
+            cat.isSetStrRef -> cat.strRef?.strCache?.ptList?.sortedBy { it.idx }?.map { it.v } ?: emptyList()
+            cat.isSetNumRef -> cat.numRef?.numCache?.ptList?.sortedBy { it.idx }?.map { it.v.orEmpty() } ?: emptyList()
+            cat.isSetNumLit -> cat.numLit?.ptList?.sortedBy { it.idx }?.map { it.v.orEmpty() } ?: emptyList()
+            cat.isSetStrLit -> cat.strLit?.ptList?.sortedBy { it.idx }?.map { it.v } ?: emptyList()
+            else -> emptyList()
         }
 
-        fun valStrings(v: CTNumDataSource?): List<String> {
-            if (v == null) return emptyList()
-            return when {
-                v.isSetNumRef -> v.numRef?.numCache?.ptList?.sortedBy { it.idx }?.map { it.v ?: "" } ?: emptyList()
-                v.isSetNumLit -> v.numLit?.ptList?.sortedBy { it.idx }?.map { it.v ?: "" } ?: emptyList()
-                else -> emptyList()
-            }
+        fun numericValues(v: CTNumDataSource?): List<String> = when {
+            v == null -> emptyList()
+            v.isSetNumRef -> v.numRef?.numCache?.ptList?.sortedBy { it.idx }?.map { it.v.orEmpty() } ?: emptyList()
+            v.isSetNumLit -> v.numLit?.ptList?.sortedBy { it.idx }?.map { it.v.orEmpty() } ?: emptyList()
+            else -> emptyList()
         }
 
-        fun serTitle(tx: CTSerTx?): String = when {
+        fun seriesName(tx: CTSerTx?): String = when {
             tx == null -> ""
             tx.isSetV -> tx.v
-            tx.isSetStrRef -> tx.strRef?.strCache?.ptList?.firstOrNull()?.v ?: ""
+            tx.isSetStrRef -> tx.strRef?.strCache?.ptList?.firstOrNull()?.v.orEmpty()
             else -> ""
         }
 
-        val seriesList = mutableListOf<SeriesData>()
-        try {
-            val plotArea = chart.ctChart.plotArea
+        for (c in plotArea.barChartList) for (s in c.serList) out += Series(
+            seriesName(if (s.isSetTx) s.tx else null),
+            categoryValues(if (s.isSetCat) s.cat else null),
+            numericValues(if (s.isSetVal) s.`val` else null),
+        )
+        for (c in plotArea.bar3DChartList) for (s in c.serList) out += Series(
+            seriesName(if (s.isSetTx) s.tx else null),
+            categoryValues(if (s.isSetCat) s.cat else null),
+            numericValues(if (s.isSetVal) s.`val` else null),
+        )
+        for (c in plotArea.lineChartList) for (s in c.serList) out += Series(
+            seriesName(if (s.isSetTx) s.tx else null),
+            categoryValues(if (s.isSetCat) s.cat else null),
+            numericValues(if (s.isSetVal) s.`val` else null),
+        )
+        for (c in plotArea.line3DChartList) for (s in c.serList) out += Series(
+            seriesName(if (s.isSetTx) s.tx else null),
+            categoryValues(if (s.isSetCat) s.cat else null),
+            numericValues(if (s.isSetVal) s.`val` else null),
+        )
+        for (c in plotArea.areaChartList) for (s in c.serList) out += Series(
+            seriesName(if (s.isSetTx) s.tx else null),
+            categoryValues(if (s.isSetCat) s.cat else null),
+            numericValues(if (s.isSetVal) s.`val` else null),
+        )
+        for (c in plotArea.area3DChartList) for (s in c.serList) out += Series(
+            seriesName(if (s.isSetTx) s.tx else null),
+            categoryValues(if (s.isSetCat) s.cat else null),
+            numericValues(if (s.isSetVal) s.`val` else null),
+        )
+        for (c in plotArea.scatterChartList) for (s in c.serList) out += Series(
+            seriesName(if (s.isSetTx) s.tx else null),
+            categoryValues(if (s.isSetXVal) s.xVal else null),
+            numericValues(if (s.isSetYVal) s.yVal else null),
+        )
+        for (c in plotArea.pieChartList) for (s in c.serList) out += Series(
+            seriesName(if (s.isSetTx) s.tx else null),
+            categoryValues(if (s.isSetCat) s.cat else null),
+            numericValues(if (s.isSetVal) s.`val` else null),
+        )
 
-            for (c in plotArea.barChartList)
-                for (s in c.serList) seriesList.add(SeriesData(
-                    serTitle(if (s.isSetTx) s.tx else null),
-                    catStrings(if (s.isSetCat) s.cat else null),
-                    valStrings(if (s.isSetVal) s.`val` else null)))
-            for (c in plotArea.bar3DChartList)
-                for (s in c.serList) seriesList.add(SeriesData(
-                    serTitle(if (s.isSetTx) s.tx else null),
-                    catStrings(if (s.isSetCat) s.cat else null),
-                    valStrings(if (s.isSetVal) s.`val` else null)))
-            for (c in plotArea.lineChartList)
-                for (s in c.serList) seriesList.add(SeriesData(
-                    serTitle(if (s.isSetTx) s.tx else null),
-                    catStrings(if (s.isSetCat) s.cat else null),
-                    valStrings(if (s.isSetVal) s.`val` else null)))
-            for (c in plotArea.line3DChartList)
-                for (s in c.serList) seriesList.add(SeriesData(
-                    serTitle(if (s.isSetTx) s.tx else null),
-                    catStrings(if (s.isSetCat) s.cat else null),
-                    valStrings(if (s.isSetVal) s.`val` else null)))
-            for (c in plotArea.areaChartList)
-                for (s in c.serList) seriesList.add(SeriesData(
-                    serTitle(if (s.isSetTx) s.tx else null),
-                    catStrings(if (s.isSetCat) s.cat else null),
-                    valStrings(if (s.isSetVal) s.`val` else null)))
-            for (c in plotArea.area3DChartList)
-                for (s in c.serList) seriesList.add(SeriesData(
-                    serTitle(if (s.isSetTx) s.tx else null),
-                    catStrings(if (s.isSetCat) s.cat else null),
-                    valStrings(if (s.isSetVal) s.`val` else null)))
-            for (c in plotArea.scatterChartList)
-                for (s in c.serList) seriesList.add(SeriesData(
-                    serTitle(if (s.isSetTx) s.tx else null),
-                    catStrings(if (s.isSetXVal) s.xVal else null),
-                    valStrings(if (s.isSetYVal) s.yVal else null)))
-
-        } catch (_: Exception) {
-            return sb.append("[unsupported chart]\n\n").toString()
-        }
-
-        if (seriesList.isEmpty()) return sb.toString()
-
-        val header = listOf("Category") + seriesList.map { it.name }
-        sb.appendLine("| " + header.joinToString(" | ") + " |")
-        sb.appendLine("|" + "---|".repeat(header.size))
-
-        val numRows = seriesList.maxOfOrNull { it.categories.size } ?: 0
-        for (i in 0 until numRows) {
-            val cat = seriesList.first().categories.getOrElse(i) { "" }
-            val vals = seriesList.map { it.values.getOrElse(i) { "" } }
-            sb.appendLine("| " + (listOf(cat) + vals).joinToString(" | ") + " |")
-        }
-
-        return sb.toString()
+        return out.filter { it.categories.isNotEmpty() || it.values.isNotEmpty() }
     }
 
-    private fun convertTable(table: XSLFTable): String {
+    private fun table(table: XSLFTable): Table? {
         val rows = table.rows
-        if (rows.isEmpty()) return ""
-
-        val sb = StringBuilder()
-        val header = rows[0].cells.map { it.text.trim().replace("|", "\\|") }
-        sb.appendLine(header.joinToString(" | ", "| ", " |"))
-        sb.appendLine(header.map { "---" }.joinToString(" | ", "| ", " |"))
-
-        for (i in 1 until rows.size) {
-            val cells = rows[i].cells.map { it.text.trim().replace("|", "\\|") }
-            sb.appendLine(cells.joinToString(" | ", "| ", " |"))
-        }
-
-        return sb.toString().trimEnd()
+        if (rows.isEmpty()) return null
+        return Table(
+            header = rows[0].cells.map { TableCell(it.text.trim()) },
+            rows = rows.drop(1).map { row -> row.cells.map { TableCell(it.text.trim()) } },
+        )
     }
 }

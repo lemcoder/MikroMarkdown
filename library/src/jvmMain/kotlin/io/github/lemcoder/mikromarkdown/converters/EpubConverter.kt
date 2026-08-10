@@ -1,9 +1,13 @@
 package io.github.lemcoder.mikromarkdown.converters
 
-import io.github.lemcoder.mikromarkdown.ConversionResult
 import io.github.lemcoder.mikromarkdown.DocumentConverter
 import io.github.lemcoder.mikromarkdown.StreamInfo
-import io.github.lemcoder.mikromarkdown.utils.HtmlToMarkdown
+import io.github.lemcoder.mikromarkdown.model.Block
+import io.github.lemcoder.mikromarkdown.model.Document
+import io.github.lemcoder.mikromarkdown.model.Paragraph
+import io.github.lemcoder.mikromarkdown.model.Strong
+import io.github.lemcoder.mikromarkdown.model.Text
+import io.github.lemcoder.mikromarkdown.utils.HtmlToDocument
 import org.w3c.dom.Element
 import org.xml.sax.InputSource
 import java.io.StringReader
@@ -11,45 +15,46 @@ import java.util.zip.ZipInputStream
 import javax.xml.parsers.DocumentBuilderFactory
 
 class EpubConverter : DocumentConverter {
+    private val metaFields = listOf(
+        "title" to "Title",
+        "creator" to "Authors",
+        "language" to "Language",
+        "description" to "Description",
+        "identifier" to "Identifier",
+    )
+
     override fun accepts(bytes: ByteArray, info: StreamInfo): Boolean {
         return info.extension == "epub" || info.mimetype == "application/epub+zip"
     }
 
-    override fun convert(bytes: ByteArray, info: StreamInfo): ConversionResult {
+    override fun parse(bytes: ByteArray, info: StreamInfo): Document {
         val entries = readZip(bytes)
 
-        val containerXml = entries["META-INF/container.xml"] ?: return ConversionResult(markdown = "")
-        val opfPath = parseOpfPath(containerXml) ?: return ConversionResult(markdown = "")
-
-        val opfBytes = entries[opfPath] ?: entries[opfPath.removePrefix("/")] ?: return ConversionResult(markdown = "")
+        val containerXml = entries["META-INF/container.xml"] ?: return Document()
+        val opfPath = parseOpfPath(containerXml) ?: return Document()
+        val opfBytes = entries[opfPath] ?: entries[opfPath.removePrefix("/")] ?: return Document()
         val opfDir = opfPath.substringBeforeLast("/", "")
 
         val (manifest, spine, metadata) = parseOpf(opfBytes)
 
-        val sb = StringBuilder()
+        val blocks = mutableListOf<Block>()
         var title: String? = metadata["title"]
 
-        val metaFields = listOf("title" to "Title", "creator" to "Authors", "language" to "Language",
-            "description" to "Description", "identifier" to "Identifier")
         for ((key, label) in metaFields) {
-            metadata[key]?.let { sb.appendLine("**$label:** $it") }
+            val value = metadata[key] ?: continue
+            blocks += Paragraph(listOf(Strong(listOf(Text("$label:"))), Text(" $value")))
         }
-        if (sb.isNotEmpty()) sb.appendLine()
 
         for (idref in spine) {
             val href = manifest[idref] ?: continue
             val fullPath = if (opfDir.isEmpty()) href else "$opfDir/$href"
             val htmlBytes = entries[fullPath] ?: entries[fullPath.removePrefix("/")] ?: continue
-            val html = htmlBytes.toString(Charsets.UTF_8)
-            val (markdown, chapterTitle) = HtmlToMarkdown.convert(html)
-            if (title == null && chapterTitle != null) title = chapterTitle
-            if (markdown.isNotBlank()) {
-                sb.appendLine(markdown)
-                sb.appendLine()
-            }
+            val chapter = HtmlToDocument.parse(htmlBytes.toString(Charsets.UTF_8))
+            if (title == null) title = chapter.title
+            blocks += chapter.blocks
         }
 
-        return ConversionResult(markdown = sb.toString(), title = title)
+        return Document(blocks = blocks, title = title, metadata = metadata)
     }
 
     private fun readZip(bytes: ByteArray): Map<String, ByteArray> {

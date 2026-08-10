@@ -1,9 +1,9 @@
 package io.github.lemcoder.mikromarkdown.converters
 
-import io.github.lemcoder.mikromarkdown.ConversionResult
 import io.github.lemcoder.mikromarkdown.DocumentConverter
 import io.github.lemcoder.mikromarkdown.StreamInfo
-import io.github.lemcoder.mikromarkdown.utils.HtmlToMarkdown
+import io.github.lemcoder.mikromarkdown.model.Document
+import io.github.lemcoder.mikromarkdown.utils.HtmlToDocument
 
 class HtmlConverter : DocumentConverter {
     override fun accepts(bytes: ByteArray, info: StreamInfo): Boolean {
@@ -11,9 +11,6 @@ class HtmlConverter : DocumentConverter {
                info.mimetype in setOf("text/html", "application/xhtml+xml")
     }
 
-    override fun convert(bytes: ByteArray, info: StreamInfo): ConversionResult {
-        val html = bytes.toString(Charsets.UTF_8)
-        val (markdown, title) = HtmlToMarkdown.convert(html)
-        return ConversionResult(markdown = markdown, title = title)
-    }
+    override fun parse(bytes: ByteArray, info: StreamInfo): Document =
+        HtmlToDocument.parse(bytes.toString(Charsets.UTF_8), info.localPath.orEmpty())
 }

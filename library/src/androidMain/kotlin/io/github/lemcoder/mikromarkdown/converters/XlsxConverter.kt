@@ -1,8 +1,13 @@
 package io.github.lemcoder.mikromarkdown.converters
 
-import io.github.lemcoder.mikromarkdown.ConversionResult
 import io.github.lemcoder.mikromarkdown.DocumentConverter
 import io.github.lemcoder.mikromarkdown.StreamInfo
+import io.github.lemcoder.mikromarkdown.model.Block
+import io.github.lemcoder.mikromarkdown.model.Document
+import io.github.lemcoder.mikromarkdown.model.Heading
+import io.github.lemcoder.mikromarkdown.model.Table
+import io.github.lemcoder.mikromarkdown.model.TableCell
+import io.github.lemcoder.mikromarkdown.model.Text
 import org.apache.poi.ss.usermodel.Cell
 import org.apache.poi.ss.usermodel.CellType
 import org.apache.poi.ss.usermodel.DataFormatter
@@ -17,37 +22,31 @@ class XlsxConverter : DocumentConverter {
                info.mimetype == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     }
 
-    override fun convert(bytes: ByteArray, info: StreamInfo): ConversionResult {
+    override fun parse(bytes: ByteArray, info: StreamInfo): Document {
         val workbook = XSSFWorkbook(bytes.inputStream())
-        val sb = StringBuilder()
+        try {
+            val blocks = mutableListOf<Block>()
 
-        for (sheet in workbook) {
-            val rows = sheet.toList()
-            if (rows.isEmpty()) continue
+            for (sheet in workbook) {
+                val rows = sheet.toList()
+                if (rows.isEmpty()) continue
 
-            val maxCols = rows.maxOf { it.lastCellNum.toInt().coerceAtLeast(0) }
-            if (maxCols == 0) continue
+                val columns = rows.maxOf { it.lastCellNum.toInt().coerceAtLeast(0) }
+                if (columns == 0) continue
 
-            sb.appendLine("## ${sheet.sheetName}")
-            sb.appendLine()
-
-            val headerCells = (0 until maxCols).map { col ->
-                cellValue(rows[0].getCell(col)).replace("|", "\\|")
+                blocks += Heading(2, listOf(Text(sheet.sheetName)))
+                blocks += Table(
+                    header = (0 until columns).map { TableCell(cellValue(rows[0].getCell(it))) },
+                    rows = rows.drop(1).map { row ->
+                        (0 until columns).map { TableCell(cellValue(row.getCell(it))) }
+                    },
+                )
             }
-            sb.appendLine(headerCells.joinToString(" | ", "| ", " |"))
-            sb.appendLine(headerCells.map { "---" }.joinToString(" | ", "| ", " |"))
 
-            for (i in 1 until rows.size) {
-                val cells = (0 until maxCols).map { col ->
-                    cellValue(rows[i].getCell(col)).replace("|", "\\|")
-                }
-                sb.appendLine(cells.joinToString(" | ", "| ", " |"))
-            }
-            sb.appendLine()
+            return Document(blocks = blocks)
+        } finally {
+            workbook.close()
         }
-
-        workbook.close()
-        return ConversionResult(markdown = sb.toString())
     }
 
     private fun cellValue(cell: Cell?): String {

@@ -1,8 +1,9 @@
 package io.github.lemcoder.mikromarkdown.converters
 
-import io.github.lemcoder.mikromarkdown.ConversionResult
 import io.github.lemcoder.mikromarkdown.DocumentConverter
 import io.github.lemcoder.mikromarkdown.StreamInfo
+import io.github.lemcoder.mikromarkdown.model.CodeBlock
+import io.github.lemcoder.mikromarkdown.model.Document
 import org.xml.sax.InputSource
 import java.io.StringReader
 import java.io.StringWriter
@@ -17,10 +18,9 @@ class XmlConverter : DocumentConverter {
         return info.extension == "xml" || info.mimetype in setOf("text/xml", "application/xml")
     }
 
-    override fun convert(bytes: ByteArray, info: StreamInfo): ConversionResult {
-        val xml = bytes.toString(Charsets.UTF_8)
-        val pretty = prettyPrint(xml)
-        return ConversionResult(markdown = "```xml\n$pretty\n```")
+    override fun parse(bytes: ByteArray, info: StreamInfo): Document {
+        val pretty = prettyPrint(bytes.toString(Charsets.UTF_8))
+        return Document(blocks = listOf(CodeBlock(pretty, "xml")))
     }
 
     private fun prettyPrint(xml: String): String = try {

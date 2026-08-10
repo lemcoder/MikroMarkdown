@@ -1,0 +1,369 @@
+package io.github.lemcoder.mikromarkdown.render
+
+import io.github.lemcoder.mikromarkdown.model.Alignment
+import io.github.lemcoder.mikromarkdown.model.Block
+import io.github.lemcoder.mikromarkdown.model.BlockQuote
+import io.github.lemcoder.mikromarkdown.model.CodeBlock
+import io.github.lemcoder.mikromarkdown.model.CodeSpan
+import io.github.lemcoder.mikromarkdown.model.Document
+import io.github.lemcoder.mikromarkdown.model.Emphasis
+import io.github.lemcoder.mikromarkdown.model.Heading
+import io.github.lemcoder.mikromarkdown.model.HtmlComment
+import io.github.lemcoder.mikromarkdown.model.Image
+import io.github.lemcoder.mikromarkdown.model.Inline
+import io.github.lemcoder.mikromarkdown.model.LineBreak
+import io.github.lemcoder.mikromarkdown.model.Link
+import io.github.lemcoder.mikromarkdown.model.ListBlock
+import io.github.lemcoder.mikromarkdown.model.ListItem
+import io.github.lemcoder.mikromarkdown.model.Paragraph
+import io.github.lemcoder.mikromarkdown.model.RawBlock
+import io.github.lemcoder.mikromarkdown.model.RawInline
+import io.github.lemcoder.mikromarkdown.model.Strikethrough
+import io.github.lemcoder.mikromarkdown.model.Strong
+import io.github.lemcoder.mikromarkdown.model.Table
+import io.github.lemcoder.mikromarkdown.model.TableCell
+import io.github.lemcoder.mikromarkdown.model.Text
+import io.github.lemcoder.mikromarkdown.model.ThematicBreak
+
+data class MarkdownOptions(
+    val bullet: Char = '-',
+    val strongMarker: String = "**",
+    val emphasisMarker: String = "*",
+    /** Escape Markdown-significant characters in [Text] nodes. */
+    val escapeText: Boolean = true,
+    /** Newlines inside table cells are replaced with this, since GFM rows are single-line. */
+    val tableCellLineBreak: String = "<br>",
+    /** Pad table columns so the source table lines up. Off keeps output compact. */
+    val padTableColumns: Boolean = false,
+    /** Emit a `key: value` YAML front matter block when the document carries metadata. */
+    val frontMatter: Boolean = false,
+    val maxHeadingLevel: Int = 6,
+    /** Drop images entirely, keeping only their alt text. */
+    val imagesAsText: Boolean = false,
+    /** Longest image URL kept inline; longer ones (e.g. base64 data URIs) are still emitted. */
+    val maxInlineImageUrl: Int = Int.MAX_VALUE,
+) {
+    companion object {
+        val Default = MarkdownOptions()
+    }
+}
+
+/** Serializes a [Document] to GitHub-Flavored Markdown. The only place Markdown syntax is produced. */
+class MarkdownRenderer(private val options: MarkdownOptions = MarkdownOptions.Default) {
+
+    fun render(document: Document): String {
+        val body = renderBlocks(document.blocks)
+        if (!options.frontMatter || document.metadata.isEmpty()) return body
+        val front = document.metadata.entries.joinToString("\n") { (k, v) ->
+            "$k: ${v.replace("\n", " ")}"
+        }
+        return "---\n$front\n---\n\n$body".trimEnd()
+    }
+
+    fun render(blocks: List<Block>): String = renderBlocks(blocks)
+
+    fun renderInline(inlines: List<Inline>): String = inlines(inlines, TextContext.INLINE)
+
+    private fun renderBlocks(blocks: List<Block>): String {
+        val chunks = mutableListOf<String>()
+        for (block in blocks) {
+            val rendered = renderBlock(block)
+            if (rendered.isNotEmpty()) chunks += rendered
+        }
+        return chunks.joinToString("\n\n").trim()
+    }
+
+    private fun renderBlock(block: Block): String = when (block) {
+        is Heading -> {
+            val text = inlines(block.content, TextContext.HEADING).collapseLines()
+            if (text.isBlank()) "" else "${"#".repeat(block.level.coerceIn(1, options.maxHeadingLevel))} $text"
+        }
+
+        is Paragraph -> inlines(block.content, TextContext.BLOCK).trimEnd()
+
+        is CodeBlock -> {
+            val fence = "`".repeat(maxOf(3, longestBacktickRun(block.code) + 1))
+            "$fence${block.language.orEmpty()}\n${block.code.trimEnd('\n')}\n$fence"
+        }
+
+        is BlockQuote -> renderBlocks(block.blocks)
+            .lines()
+            .joinToString("\n") { if (it.isEmpty()) ">" else "> $it" }
+
+        is ListBlock -> renderList(block, indent = "")
+
+        is Table -> renderTable(block)
+
+        ThematicBreak -> "---"
+
+        is HtmlComment -> "<!-- ${block.text.trim()} -->"
+
+        // Already-Markdown content: only whitespace is normalized, never syntax.
+        is RawBlock -> block.text
+            .replace("\r\n", "\n")
+            .lines()
+            .joinToString("\n") { it.trimEnd() }
+            .replace(Regex("\n{3,}"), "\n\n")
+            .trim()
+    }
+
+    private fun renderList(list: ListBlock, indent: String): String {
+        val lines = mutableListOf<String>()
+        list.items.forEachIndexed { index, item ->
+            val marker = if (list.ordered) "${list.start + index}. " else "${options.bullet} "
+            val checkbox = when (item.checked) {
+                true -> "[x] "
+                false -> "[ ] "
+                null -> ""
+            }
+            val childIndent = indent + " ".repeat(marker.length)
+            val body = renderItemBlocks(item, childIndent)
+            val firstLine = body.firstOrNull().orEmpty()
+            lines += "$indent$marker$checkbox$firstLine".trimEnd()
+            lines += body.drop(1)
+            if (list.loose && index != list.items.lastIndex) lines += ""
+        }
+        return lines.joinToString("\n").trimEnd()
+    }
+
+    /** Renders an item's blocks as lines, with continuation lines already indented. */
+    private fun renderItemBlocks(item: ListItem, childIndent: String): List<String> {
+        val lines = mutableListOf<String>()
+        item.blocks.forEachIndexed { index, block ->
+            if (index > 0) lines += ""
+            val rendered = when (block) {
+                is ListBlock -> renderList(block, childIndent)
+                else -> renderBlock(block).lines().joinToString("\n") { if (it.isEmpty()) it else childIndent + it }
+            }
+            if (rendered.isEmpty()) return@forEachIndexed
+            lines += rendered.lines()
+        }
+        // The first line's indent is supplied by the marker itself.
+        if (lines.isNotEmpty()) lines[0] = lines[0].removePrefix(childIndent)
+        return lines
+    }
+
+    private fun renderTable(table: Table): String {
+        val bodyRows = table.rows.map { expandSpans(it) }
+        val headerCells = expandSpans(table.header)
+        val columns = maxOf(headerCells.size, bodyRows.maxOfOrNull { it.size } ?: 0)
+        if (columns == 0) return ""
+
+        val header = pad(headerCells, columns)
+        val rows = bodyRows.map { pad(it, columns) }
+        val alignments = List(columns) { table.alignments.getOrElse(it) { Alignment.NONE } }
+
+        val widths = if (options.padTableColumns) {
+            List(columns) { col ->
+                maxOf(
+                    3,
+                    header[col].length,
+                    rows.maxOfOrNull { it[col].length } ?: 0,
+                )
+            }
+        } else {
+            null
+        }
+
+        val out = StringBuilder()
+        out.append(row(header, widths)).append('\n')
+        out.append(delimiterRow(alignments, widths)).append('\n')
+        for ((index, r) in rows.withIndex()) {
+            out.append(row(r, widths))
+            if (index != rows.lastIndex) out.append('\n')
+        }
+        if (table.caption.isNotEmpty()) {
+            out.append("\n\n").append(options.emphasisMarker)
+                .append(inlines(table.caption, TextContext.INLINE).collapseLines())
+                .append(options.emphasisMarker)
+        }
+        return out.toString()
+    }
+
+    /** GFM has no colspan: a spanning cell keeps its text and the covered columns render empty. */
+    private fun expandSpans(cells: List<TableCell>): List<String> {
+        val out = mutableListOf<String>()
+        for (cell in cells) {
+            out += cellText(cell)
+            repeat((cell.colSpan - 1).coerceAtLeast(0)) { out += "" }
+        }
+        return out
+    }
+
+    private fun cellText(cell: TableCell): String =
+        inlines(cell.content, TextContext.TABLE)
+            .replace("\r\n", "\n")
+            .lines()
+            .joinToString(options.tableCellLineBreak) { it.trim() }
+            .trim()
+
+    private fun pad(cells: List<String>, columns: Int): List<String> =
+        if (cells.size >= columns) cells.take(columns) else cells + List(columns - cells.size) { "" }
+
+    private fun row(cells: List<String>, widths: List<Int>?): String =
+        cells.mapIndexed { index, cell ->
+            if (widths == null) cell else cell.padEnd(widths[index])
+        }.joinToString(" | ", "| ", " |")
+
+    private fun delimiterRow(alignments: List<Alignment>, widths: List<Int>?): String =
+        alignments.mapIndexed { index, alignment ->
+            val width = widths?.get(index) ?: 3
+            when (alignment) {
+                Alignment.NONE -> "-".repeat(width)
+                Alignment.LEFT -> ":" + "-".repeat(width - 1)
+                Alignment.RIGHT -> "-".repeat(width - 1) + ":"
+                Alignment.CENTER -> ":" + "-".repeat(width - 2) + ":"
+            }
+        }.joinToString(" | ", "| ", " |")
+
+    private fun inlines(inlines: List<Inline>, context: TextContext): String {
+        val sb = StringBuilder()
+        for (inline in inlines) sb.appendInline(inline, context)
+        return sb.toString()
+    }
+
+    private fun StringBuilder.appendInline(inline: Inline, context: TextContext) {
+        when (inline) {
+            is Text -> append(escape(inline.value, context, atLineStart = isAtLineStart(context)))
+
+            is Strong -> wrap(inline.content, options.strongMarker, context)
+            is Emphasis -> wrap(inline.content, options.emphasisMarker, context)
+            is Strikethrough -> wrap(inline.content, "~~", context)
+
+            is CodeSpan -> {
+                val ticks = "`".repeat(longestBacktickRun(inline.code) + 1)
+                val padding = if (inline.code.startsWith('`') || inline.code.endsWith('`')) " " else ""
+                append(ticks).append(padding).append(inline.code.replace("\n", " ")).append(padding).append(ticks)
+            }
+
+            is Link -> {
+                val label = inlines(inline.content, TextContext.INLINE).collapseLines().ifBlank { inline.url }
+                append('[').append(label).append("](").append(encodeUrl(inline.url))
+                inline.title?.let { append(" \"").append(it.replace("\"", "\\\"")).append('"') }
+                append(')')
+            }
+
+            is Image -> {
+                val alt = inline.alt.replace("\n", " ").replace("]", "\\]")
+                if (options.imagesAsText || inline.url.isBlank()) {
+                    if (alt.isNotBlank()) append(alt)
+                } else if (inline.url.length > options.maxInlineImageUrl) {
+                    if (alt.isNotBlank()) append(alt)
+                } else {
+                    append("![").append(alt).append("](").append(encodeUrl(inline.url))
+                    inline.title?.let { append(" \"").append(it.replace("\"", "\\\"")).append('"') }
+                    append(')')
+                }
+            }
+
+            LineBreak -> if (context == TextContext.TABLE) append(' ') else append("\\\n")
+
+            is RawInline -> append(inline.text)
+        }
+    }
+
+    private fun StringBuilder.wrap(content: List<Inline>, marker: String, context: TextContext) {
+        val inner = inlines(content, context)
+        if (inner.isBlank()) {
+            append(inner)
+            return
+        }
+        // Markers must hug the text: "**bold** " not "** bold **".
+        val leading = inner.takeWhile { it.isWhitespace() }
+        val trailing = inner.takeLastWhile { it.isWhitespace() }
+        append(leading).append(marker).append(inner.trim()).append(marker).append(trailing)
+    }
+
+    private fun StringBuilder.isAtLineStart(context: TextContext): Boolean =
+        context != TextContext.TABLE && (isEmpty() || last() == '\n')
+
+    private fun escape(value: String, context: TextContext, atLineStart: Boolean): String {
+        val text = value.replace("\r\n", "\n").replace('\r', '\n')
+        if (!options.escapeText) {
+            return if (context == TextContext.TABLE) text.replace("|", "\\|") else text
+        }
+        return buildString(text.length) {
+            var lineStart = atLineStart
+            for ((index, ch) in text.withIndex()) {
+                val prev = text.getOrNull(index - 1)
+                val next = text.getOrNull(index + 1)
+                when {
+                    ch == '\n' -> {
+                        append(ch)
+                        lineStart = true
+                        continue
+                    }
+
+                    ch == '\\' -> append("\\\\")
+                    ch == '|' && context == TextContext.TABLE -> append("\\|")
+                    ch == '*' -> append("\\*")
+                    ch == '`' -> append("\\`")
+                    ch == '[' || ch == ']' -> append('\\').append(ch)
+                    // Intraword underscores (snake_case) are not emphasis in CommonMark.
+                    ch == '_' && !(prev?.isLetterOrDigit() == true && next?.isLetterOrDigit() == true) ->
+                        append("\\_")
+
+                    ch == '<' && next?.let { it.isLetter() || it == '/' || it == '!' } == true -> append("\\<")
+                    ch == '&' && looksLikeEntity(text, index) -> append("\\&")
+
+                    lineStart && (ch == '#' || ch == '>' || ch == '=') -> append('\\').append(ch)
+                    lineStart && (ch == '-' || ch == '+') && next?.isWhitespace() != false -> append('\\').append(ch)
+                    lineStart && ch.isDigit() && startsOrderedList(text, index) -> {
+                        append(ch)
+                        // Escape the delimiter instead of the digits: "1\. item".
+                    }
+
+                    lineStart && (ch == '.' || ch == ')') && prev?.isDigit() == true &&
+                        startsOrderedList(text, index - 1) -> append('\\').append(ch)
+
+                    else -> append(ch)
+                }
+                if (!ch.isWhitespace()) lineStart = false
+            }
+        }
+    }
+
+    private fun startsOrderedList(text: String, digitIndex: Int): Boolean {
+        var start = digitIndex
+        while (start > 0 && text[start - 1].isDigit()) start--
+        if (start > 0 && !text[start - 1].isWhitespace()) return false
+        var end = digitIndex
+        while (end + 1 < text.length && text[end + 1].isDigit()) end++
+        val delimiter = text.getOrNull(end + 1) ?: return false
+        if (delimiter != '.' && delimiter != ')') return false
+        val after = text.getOrNull(end + 2)
+        return after == null || after == ' ' || after == '\n'
+    }
+
+    private fun looksLikeEntity(text: String, index: Int): Boolean {
+        val semicolon = text.indexOf(';', index)
+        if (semicolon <= index || semicolon - index > 10) return false
+        return text.substring(index + 1, semicolon).all { it.isLetterOrDigit() || it == '#' }
+    }
+
+    private fun encodeUrl(url: String): String =
+        url.replace(" ", "%20").replace("(", "%28").replace(")", "%29")
+
+    private fun longestBacktickRun(text: String): Int {
+        var longest = 0
+        var current = 0
+        for (ch in text) {
+            if (ch == '`') {
+                current++
+                if (current > longest) longest = current
+            } else {
+                current = 0
+            }
+        }
+        return longest
+    }
+
+    private fun String.collapseLines(): String =
+        replace("\r\n", "\n").lines().joinToString(" ") { it.trim() }.trim()
+
+    private enum class TextContext { BLOCK, INLINE, HEADING, TABLE }
+
+    companion object {
+        val Default = MarkdownRenderer()
+    }
+}

@@ -41,7 +41,6 @@ kotlin {
 
         jvmMain.dependencies {
             implementation(libs.jsoup)
-            implementation(libs.flexmark.html2md)
             implementation(libs.jackson.kotlin)
             implementation(libs.commons.csv)
             implementation(libs.poi.ooxml)
@@ -51,7 +50,6 @@ kotlin {
 
         androidMain.dependencies {
             implementation(libs.jsoup)
-            implementation(libs.flexmark.html2md)
             implementation(libs.jackson.kotlin)
             implementation(libs.commons.csv)
             implementation(libs.poi.ooxml)

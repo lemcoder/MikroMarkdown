@@ -20,6 +20,32 @@ Kotlin Multiplatform (JVM + Android) library that converts documents to Markdown
 | Plain text | `.txt` and others |
 | Markdown | `.md` (passthrough) |
 
+## Architecture
+
+Every format is parsed into one shared document model, and a single renderer serializes that model
+to GitHub-Flavored Markdown:
+
+```
+bytes ──► MimeDetector ──► DocumentConverter.parse ──► Document ──► MarkdownRenderer ──► Markdown
+                                (per format)          (blocks,        (one GFM
+                                                       inlines,        serializer)
+                                                       tables,
+                                                       assets)
+```
+
+Converters contain no Markdown syntax, so escaping, table shaping, list indentation and spacing are
+fixed once for all formats. The model is public: `mid.parse(path)` returns the `Document`, and
+`ConversionResult.document` exposes it alongside the rendered Markdown.
+
+```kotlin
+val document = mid.parse("/path/to/report.docx")
+document.blocks.filterIsInstance<Table>().forEach { println(it.rows.size) }
+
+// Render with different options
+val compact = MarkdownRenderer(MarkdownOptions(padTableColumns = true, imagesAsText = true))
+println(compact.render(document))
+```
+
 ## Setup
 
 ```kotlin
@@ -69,8 +95,10 @@ class MyConverter : DocumentConverter {
     override fun accepts(bytes: ByteArray, info: StreamInfo): Boolean =
         info.extension == "xyz"
 
-    override fun convert(bytes: ByteArray, info: StreamInfo): ConversionResult =
-        ConversionResult(markdown = String(bytes))
+    override fun parse(bytes: ByteArray, info: StreamInfo): Document = document {
+        heading(1, "Custom")
+        paragraph(bytes.decodeToString())
+    }
 }
 
 val mid = MarkItDown()
@@ -99,3 +127,18 @@ mid.register(HtmlConverter())
 | `FileConversionException` | Converter threw during conversion |
 
 Both extend `MarkItDownException`.
+
+## Benchmark
+
+`scripts/benchmark.py` converts the test fixtures with MikroMarkdown, Python
+[markitdown](https://github.com/microsoft/markitdown) and Rust
+[anydoc](https://github.com/firecrawl/anydoc), then reports content recall, structure counts, table
+integrity and timings to `build/benchmark/report.md`:
+
+```bash
+./gradlew :cli:installDist
+python3 scripts/benchmark.py
+```
+
+Engines whose CLI is missing are skipped. anydoc only handles binary formats, so it sits out the
+HTML/JSON/XML fixtures.

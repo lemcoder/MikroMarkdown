@@ -1,12 +1,25 @@
 package io.github.lemcoder.mikromarkdown.converters
 
-import java.util.Base64
-import io.github.lemcoder.mikromarkdown.ConversionResult
 import io.github.lemcoder.mikromarkdown.DocumentConverter
 import io.github.lemcoder.mikromarkdown.StreamInfo
+import io.github.lemcoder.mikromarkdown.model.Asset
+import io.github.lemcoder.mikromarkdown.model.Block
+import io.github.lemcoder.mikromarkdown.model.Document
+import io.github.lemcoder.mikromarkdown.model.Heading
+import io.github.lemcoder.mikromarkdown.model.Image
+import io.github.lemcoder.mikromarkdown.model.Inline
+import io.github.lemcoder.mikromarkdown.model.ListBlock
+import io.github.lemcoder.mikromarkdown.model.ListItem
+import io.github.lemcoder.mikromarkdown.model.Paragraph
+import io.github.lemcoder.mikromarkdown.model.Table
+import io.github.lemcoder.mikromarkdown.model.TableCell
+import io.github.lemcoder.mikromarkdown.model.Text
+import io.github.lemcoder.mikromarkdown.model.plainText
+import io.github.lemcoder.mikromarkdown.model.styled
 import org.apache.poi.xwpf.usermodel.XWPFDocument
 import org.apache.poi.xwpf.usermodel.XWPFParagraph
 import org.apache.poi.xwpf.usermodel.XWPFTable
+import java.util.Base64
 
 class DocxConverter : DocumentConverter {
     override fun accepts(bytes: ByteArray, info: StreamInfo): Boolean {
@@ -14,92 +27,128 @@ class DocxConverter : DocumentConverter {
                info.mimetype == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     }
 
-    override fun convert(bytes: ByteArray, info: StreamInfo): ConversionResult {
-        val doc = XWPFDocument(bytes.inputStream())
-        val sb = StringBuilder()
-        var title: String? = null
+    override fun parse(bytes: ByteArray, info: StreamInfo): Document {
+        val docx = XWPFDocument(bytes.inputStream())
+        try {
+            val blocks = mutableListOf<Block>()
+            val assets = mutableListOf<Asset>()
+            var title: String? = docx.properties?.coreProperties?.title?.trim()?.ifBlank { null }
+            val pendingListItems = mutableListOf<Pair<Int, List<Inline>>>()
 
-        for (element in doc.bodyElements) {
-            when (element) {
-                is XWPFParagraph -> {
-                    val md = convertParagraph(element)
-                    if (md.isNotBlank()) {
-                        if (title == null && headingLevel(element.styleID) > 0) {
-                            title = element.text
+            fun flushList() {
+                if (pendingListItems.isEmpty()) return
+                blocks += buildNestedList(pendingListItems)
+                pendingListItems.clear()
+            }
+
+            for (element in docx.bodyElements) {
+                when (element) {
+                    is XWPFParagraph -> {
+                        val content = paragraphInlines(element, assets)
+                        if (content.plainText().isBlank() && content.none { it is Image }) continue
+
+                        val level = headingLevel(element.styleID)
+                        when {
+                            level > 0 -> {
+                                flushList()
+                                if (title == null) title = content.plainText().trim()
+                                blocks += Heading(level, content)
+                            }
+
+                            element.numID != null ->
+                                pendingListItems += (element.numIlvl?.toInt() ?: 0).coerceAtLeast(0) to content
+
+                            else -> {
+                                flushList()
+                                blocks += Paragraph(content)
+                            }
                         }
-                        sb.appendLine(md)
-                        sb.appendLine()
                     }
-                }
-                is XWPFTable -> {
-                    val tableMd = convertTable(element)
-                    if (tableMd.isNotBlank()) {
-                        sb.appendLine(tableMd)
+
+                    is XWPFTable -> {
+                        flushList()
+                        table(element)?.let { blocks += it }
                     }
                 }
             }
-        }
+            flushList()
 
-        doc.close()
-        return ConversionResult(markdown = sb.toString(), title = title)
-    }
-
-    private fun convertParagraph(para: XWPFParagraph): String {
-        val rawText = para.runs.joinToString("") { run ->
-            val pics = run.embeddedPictures
-            if (pics.isNotEmpty()) {
-                return@joinToString pics.joinToString("") { pic ->
-                    val descr = pic.description ?: ""
-                    val data = pic.pictureData
-                    if (data != null) {
-                        val mime = data.pictureTypeEnum.contentType
-                        val b64 = Base64.getEncoder().encodeToString(data.data)
-                        "![$descr](data:$mime;base64,$b64)"
-                    } else {
-                        "![$descr]()"
-                    }
-                }
-            }
-            var text = run.text() ?: ""
-            if (text.isBlank()) return@joinToString text
-            when {
-                run.isBold && run.isItalic -> "***$text***"
-                run.isBold -> "**$text**"
-                run.isItalic -> "*$text*"
-                else -> text
-            }
-        }
-
-        if (rawText.isBlank()) return ""
-
-        val level = headingLevel(para.styleID)
-        val isListItem = para.numID != null
-
-        return when {
-            level > 0 -> "${"#".repeat(level)} $rawText"
-            isListItem -> {
-                val indent = "  ".repeat((para.numIlvl?.toInt() ?: 0).coerceAtLeast(0))
-                "$indent- $rawText"
-            }
-            else -> rawText
+            return Document(blocks = blocks, title = title, assets = assets)
+        } finally {
+            docx.close()
         }
     }
 
-    private fun convertTable(table: XWPFTable): String {
+    private fun paragraphInlines(para: XWPFParagraph, assets: MutableList<Asset>): List<Inline> {
+        val out = mutableListOf<Inline>()
+        for (run in para.runs) {
+            val pictures = run.embeddedPictures
+            if (pictures.isNotEmpty()) {
+                for (picture in pictures) {
+                    val data = picture.pictureData
+                    val alt = picture.description.orEmpty()
+                    if (data == null) {
+                        if (alt.isNotBlank()) out += Text(alt)
+                        continue
+                    }
+                    val mime = data.pictureTypeEnum.contentType
+                    val id = data.fileName ?: "image-${assets.size + 1}"
+                    assets += Asset(id = id, mediaType = mime, bytes = data.data, name = data.fileName)
+                    out += Image(
+                        alt = alt,
+                        url = "data:$mime;base64,${Base64.getEncoder().encodeToString(data.data)}",
+                        assetId = id,
+                    )
+                }
+                continue
+            }
+
+            val text = run.text() ?: continue
+            if (text.isEmpty()) continue
+            if (text.isBlank()) {
+                out += Text(text)
+                continue
+            }
+            out += styled(listOf(Text(text)), bold = run.isBold, italic = run.isItalic, strike = run.isStrikeThrough)
+        }
+        return out
+    }
+
+    /** Rebuilds Word's flat numbering levels into nested list blocks. */
+    private fun buildNestedList(items: List<Pair<Int, List<Inline>>>): ListBlock {
+        var index = 0
+
+        fun build(level: Int): List<ListItem> {
+            val result = mutableListOf<ListItem>()
+            while (index < items.size) {
+                val (itemLevel, content) = items[index]
+                when {
+                    itemLevel < level -> break
+                    itemLevel == level -> {
+                        index++
+                        val children = if (index < items.size && items[index].first > level) {
+                            listOf(ListBlock(ordered = false, items = build(items[index].first)))
+                        } else {
+                            emptyList()
+                        }
+                        result += ListItem(listOf(Paragraph(content)) + children)
+                    }
+                    // A deeper first item without a parent: promote it to this level.
+                    else -> result += ListItem(listOf(ListBlock(ordered = false, items = build(itemLevel))))
+                }
+            }
+            return result
+        }
+
+        return ListBlock(ordered = false, items = build(items.minOf { it.first }))
+    }
+
+    private fun table(table: XWPFTable): Table? {
         val rows = table.rows
-        if (rows.isEmpty()) return ""
-
-        val sb = StringBuilder()
-        val header = rows[0].tableCells.map { it.text.replace("|", "\\|") }
-        sb.appendLine(header.joinToString(" | ", "| ", " |"))
-        sb.appendLine(header.map { "---" }.joinToString(" | ", "| ", " |"))
-
-        for (i in 1 until rows.size) {
-            val cells = rows[i].tableCells.map { it.text.replace("|", "\\|") }
-            sb.appendLine(cells.joinToString(" | ", "| ", " |"))
-        }
-
-        return sb.toString().trimEnd()
+        if (rows.isEmpty()) return null
+        val header = rows[0].tableCells.map { TableCell(it.text.trim()) }
+        val body = rows.drop(1).map { row -> row.tableCells.map { TableCell(it.text.trim()) } }
+        return Table(header = header, rows = body)
     }
 
     private fun headingLevel(style: String?): Int {
@@ -107,6 +156,7 @@ class DocxConverter : DocumentConverter {
         if (s.startsWith("Heading", ignoreCase = true)) {
             return s.drop(7).toIntOrNull()?.coerceIn(1, 6) ?: 0
         }
+        // OOXML numeric style IDs 1-6 map directly to heading levels
         return s.toIntOrNull()?.takeIf { it in 1..6 } ?: 0
     }
 }
