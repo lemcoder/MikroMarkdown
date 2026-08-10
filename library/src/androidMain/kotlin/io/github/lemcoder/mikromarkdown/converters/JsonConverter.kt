@@ -5,9 +5,10 @@ import com.fasterxml.jackson.core.util.DefaultIndenter
 import com.fasterxml.jackson.core.util.DefaultPrettyPrinter
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.registerKotlinModule
-import io.github.lemcoder.mikromarkdown.ConversionResult
 import io.github.lemcoder.mikromarkdown.DocumentConverter
 import io.github.lemcoder.mikromarkdown.StreamInfo
+import io.github.lemcoder.mikromarkdown.model.CodeBlock
+import io.github.lemcoder.mikromarkdown.model.Document
 
 class JsonConverter : DocumentConverter {
     private val writer = ObjectMapper().apply {
@@ -25,14 +26,13 @@ class JsonConverter : DocumentConverter {
         return info.extension == "json" || info.mimetype in setOf("application/json", "text/json")
     }
 
-    override fun convert(bytes: ByteArray, info: StreamInfo): ConversionResult {
+    override fun parse(bytes: ByteArray, info: StreamInfo): Document {
         val json = bytes.toString(Charsets.UTF_8)
         val pretty = try {
-            val node = ObjectMapper().readTree(json)
-            writer.writeValueAsString(node)
+            writer.writeValueAsString(ObjectMapper().readTree(json))
         } catch (_: Exception) {
             json
         }
-        return ConversionResult(markdown = pretty)
+        return Document(blocks = listOf(CodeBlock(pretty, "json")))
     }
 }

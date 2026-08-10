@@ -60,6 +60,10 @@ class PythonComparisonTest {
             .replace(Regex("(?m)^.*move to sidebar.*$"), "")
             .replace(Regex("(?m)^\\s*hide\\s*$"), "")
             .replace(Regex("(?m)^[*\\s]*Toggle\\b.*$"), "")
+            // Java's \s ignores Unicode spacing (thin/hair/narrow), Python's does not.
+            .replace(Regex("[\\u2000-\\u200A\\u202F\\u205F\\u3000]"), " ")
+            // Tracking pixels live in <noscript>, which we drop; markitdown keeps them.
+            .replace(Regex("!\\[[^\\]]*]\\([^)]*CentralAutoLogin[^)]*\\)"), "")
 
     // Tokens longer than 3 chars, lowercased, deduped
     private fun tokenize(text: String): Set<String> =
