@@ -39,7 +39,7 @@ class MikroMarkdown(
             if (!converter.accepts(bytes, info)) continue
             return try {
                 converter.parse(bytes, info)
-            } catch (e: MarkItDownException) {
+            } catch (e: MikroMarkdownException) {
                 throw e
             } catch (e: Exception) {
                 throw FileConversionException(

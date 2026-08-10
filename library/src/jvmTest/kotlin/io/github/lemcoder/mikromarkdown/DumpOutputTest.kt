@@ -4,7 +4,7 @@ import org.junit.jupiter.api.Test
 import java.io.File
 
 class DumpOutputTest {
-    private val mid = MarkItDown()
+    private val mid = MikroMarkdown()
 
     @Test
     fun dumpAll() {

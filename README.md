@@ -60,9 +60,9 @@ dependencies {
 ### JVM
 
 ```kotlin
-import io.github.lemcoder.mikromarkdown.MarkItDown
+import io.github.lemcoder.mikromarkdown.MikroMarkdown
 
-val mid = MarkItDown()
+val mid = MikroMarkdown()
 
 // from file path
 val result = mid.convert("/path/to/document.docx")
@@ -78,10 +78,10 @@ println(result.title) // nullable, extracted from document metadata
 ### Android
 
 ```kotlin
-import io.github.lemcoder.mikromarkdown.MarkItDown
+import io.github.lemcoder.mikromarkdown.MikroMarkdown
 
 // pass Context to enable PDF support
-val mid = MarkItDown(context)
+val mid = MikroMarkdown(context)
 
 val result = mid.convert(file.absolutePath)
 ```
@@ -101,7 +101,7 @@ class MyConverter : DocumentConverter {
     }
 }
 
-val mid = MarkItDown()
+val mid = MikroMarkdown()
 mid.register(MyConverter())                  // default priority 0.0
 mid.register(FallbackConverter(), priority = 10.0) // higher = later
 ```
@@ -126,7 +126,7 @@ mid.register(HtmlConverter())
 | `UnsupportedFormatException` | No registered converter accepted the input |
 | `FileConversionException` | Converter threw during conversion |
 
-Both extend `MarkItDownException`.
+Both extend `MikroMarkdownException`.
 
 ## Benchmark
 

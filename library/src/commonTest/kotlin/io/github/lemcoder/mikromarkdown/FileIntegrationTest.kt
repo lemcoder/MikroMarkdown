@@ -5,10 +5,10 @@ import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-expect fun testMarkItDown(): MikroMarkdown
+expect fun testMikroMarkdown(): MikroMarkdown
 
 class FileIntegrationTest {
-    private val mid = testMarkItDown()
+    private val mid = testMikroMarkdown()
 
     private fun assertConversion(
         filename: String,

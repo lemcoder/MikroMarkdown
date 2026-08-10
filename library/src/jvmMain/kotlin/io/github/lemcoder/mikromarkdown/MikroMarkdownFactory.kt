@@ -1,7 +1,6 @@
 package io.github.lemcoder.mikromarkdown
 
-import android.content.Context
-import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
+import io.github.lemcoder.mikromarkdown.utils.TikaMimeDetector
 import io.github.lemcoder.mikromarkdown.converters.CsvConverter
 import io.github.lemcoder.mikromarkdown.converters.DocxConverter
 import io.github.lemcoder.mikromarkdown.converters.EpubConverter
@@ -13,10 +12,10 @@ import io.github.lemcoder.mikromarkdown.converters.PlainTextConverter
 import io.github.lemcoder.mikromarkdown.converters.PptxConverter
 import io.github.lemcoder.mikromarkdown.converters.XlsxConverter
 import io.github.lemcoder.mikromarkdown.converters.XmlConverter
-import io.github.lemcoder.mikromarkdown.utils.AndroidMimeDetector
 import java.io.File
 
-fun MarkItDown(context: Context? = null): MikroMarkdown = MikroMarkdown(AndroidMimeDetector).apply {
+/** A [MikroMarkdown] with every JVM converter registered and Tika-based format detection. */
+fun MikroMarkdown(): MikroMarkdown = MikroMarkdown(TikaMimeDetector).apply {
     register(MarkdownPassthroughConverter())
     register(HtmlConverter())
     register(CsvConverter())
@@ -26,10 +25,7 @@ fun MarkItDown(context: Context? = null): MikroMarkdown = MikroMarkdown(AndroidM
     register(XlsxConverter())
     register(PptxConverter())
     register(EpubConverter())
-    if (context != null) {
-        PDFBoxResourceLoader.init(context)
-        register(PdfConverter())
-    }
+    register(PdfConverter())
     register(PlainTextConverter(), priority = 10.0)
 }
 

@@ -95,7 +95,7 @@ class PythonComparisonTest {
                 markitdownCmd.isNotEmpty(),
                 "markitdown CLI not available — install via `pip install markitdown` or `uv tool install markitdown`",
             )
-            mid = MarkItDown()
+            mid = MikroMarkdown()
         }
 
         private fun resolveMarkitdownCmd(): List<String> {
