@@ -5,7 +5,7 @@ import io.github.lemcoder.mikromarkdown.StreamInfo
 import java.io.File
 import org.apache.tika.Tika
 
-object TikaMimeDetector : MimeDetector {
+internal object TikaMimeDetector : MimeDetector {
     private val tika = Tika()
 
     override fun detect(path: String): StreamInfo {

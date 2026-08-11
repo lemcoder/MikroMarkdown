@@ -14,7 +14,7 @@ import org.apache.poi.ss.usermodel.CellType
 import org.apache.poi.ss.usermodel.DataFormatter
 import org.apache.poi.xssf.usermodel.XSSFWorkbook
 
-class XlsxConverter : DocumentConverter {
+public class XlsxConverter : DocumentConverter {
     private val formatter = DataFormatter()
 
     override fun accepts(bytes: ByteArray, info: StreamInfo): Boolean {

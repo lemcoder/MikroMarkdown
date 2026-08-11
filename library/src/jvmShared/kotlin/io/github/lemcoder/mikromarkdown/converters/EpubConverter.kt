@@ -14,7 +14,7 @@ import javax.xml.parsers.DocumentBuilderFactory
 import org.w3c.dom.Element
 import org.xml.sax.InputSource
 
-class EpubConverter : DocumentConverter {
+public class EpubConverter : DocumentConverter {
     private val metaFields =
         listOf(
             "title" to "Title",

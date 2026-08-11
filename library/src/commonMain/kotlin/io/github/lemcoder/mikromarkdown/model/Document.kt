@@ -6,7 +6,7 @@ package io.github.lemcoder.mikromarkdown.model
  * Every converter parses its input into a [Document]; a single renderer turns documents into Markdown. Output quirks
  * are therefore fixed once, in the renderer, rather than per format.
  */
-data class Document(
+public data class Document(
     val blocks: List<Block> = emptyList(),
     val title: String? = null,
     val metadata: Map<String, String> = emptyMap(),
@@ -14,7 +14,7 @@ data class Document(
 )
 
 /** An embedded binary resource (image, thumbnail, object) referenced by [Image.assetId]. */
-data class Asset(
+public data class Asset(
     val id: String,
     val mediaType: String,
     val bytes: ByteArray,
@@ -26,21 +26,21 @@ data class Asset(
     override fun hashCode(): Int = id.hashCode()
 }
 
-sealed interface Block
+public sealed interface Block
 
-data class Heading(
+public data class Heading(
     val level: Int,
     val content: List<Inline>,
     val anchor: String? = null,
 ) : Block
 
-data class Paragraph(val content: List<Inline>) : Block
+public data class Paragraph(val content: List<Inline>) : Block
 
-data class CodeBlock(val code: String, val language: String? = null) : Block
+public data class CodeBlock(val code: String, val language: String? = null) : Block
 
-data class BlockQuote(val blocks: List<Block>) : Block
+public data class BlockQuote(val blocks: List<Block>) : Block
 
-data class ListBlock(
+public data class ListBlock(
     val ordered: Boolean,
     val items: List<ListItem>,
     val start: Int = 1,
@@ -48,57 +48,57 @@ data class ListBlock(
     val loose: Boolean = false,
 ) : Block
 
-data class ListItem(
+public data class ListItem(
     val blocks: List<Block>,
     /** Non-null makes this a GFM task-list item. */
     val checked: Boolean? = null,
 )
 
-data class Table(
+public data class Table(
     val header: List<TableCell> = emptyList(),
     val rows: List<List<TableCell>> = emptyList(),
     val alignments: List<Alignment> = emptyList(),
     val caption: List<Inline> = emptyList(),
 ) : Block
 
-data class TableCell(
+public data class TableCell(
     val content: List<Inline>,
     val colSpan: Int = 1,
     val rowSpan: Int = 1,
 ) {
-    constructor(text: String) : this(if (text.isEmpty()) emptyList() else listOf(Text(text)))
+    public constructor(text: String) : this(if (text.isEmpty()) emptyList() else listOf(Text(text)))
 }
 
-enum class Alignment {
+public enum class Alignment {
     NONE,
     LEFT,
     CENTER,
     RIGHT,
 }
 
-data object ThematicBreak : Block
+public data object ThematicBreak : Block
 
 /** Rendered verbatim as an HTML comment. Used for structural markers such as slide numbers. */
-data class HtmlComment(val text: String) : Block
+public data class HtmlComment(val text: String) : Block
 
 /** Escape hatch for content that is already Markdown (or must not be touched). */
-data class RawBlock(val text: String) : Block
+public data class RawBlock(val text: String) : Block
 
-sealed interface Inline
+public sealed interface Inline
 
-data class Text(val value: String) : Inline
+public data class Text(val value: String) : Inline
 
-data class Strong(val content: List<Inline>) : Inline
+public data class Strong(val content: List<Inline>) : Inline
 
-data class Emphasis(val content: List<Inline>) : Inline
+public data class Emphasis(val content: List<Inline>) : Inline
 
-data class Strikethrough(val content: List<Inline>) : Inline
+public data class Strikethrough(val content: List<Inline>) : Inline
 
-data class CodeSpan(val code: String) : Inline
+public data class CodeSpan(val code: String) : Inline
 
-data class Link(val content: List<Inline>, val url: String, val title: String? = null) : Inline
+public data class Link(val content: List<Inline>, val url: String, val title: String? = null) : Inline
 
-data class Image(
+public data class Image(
     val alt: String,
     val url: String,
     val title: String? = null,
@@ -106,13 +106,13 @@ data class Image(
 ) : Inline
 
 /** Hard line break inside a paragraph. */
-data object LineBreak : Inline
+public data object LineBreak : Inline
 
 /** Inline content that is already Markdown/HTML and must be emitted verbatim. */
-data class RawInline(val text: String) : Inline
+public data class RawInline(val text: String) : Inline
 
 /** Flattens inline content to its plain-text form (used for titles, anchors, alt text). */
-fun List<Inline>.plainText(): String = buildString { appendPlain(this@plainText) }
+public fun List<Inline>.plainText(): String = buildString { appendPlain(this@plainText) }
 
 private fun StringBuilder.appendPlain(inlines: List<Inline>) {
     for (inline in inlines) {

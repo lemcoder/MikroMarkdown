@@ -15,7 +15,7 @@ import io.github.lemcoder.mikromarkdown.utils.TikaMimeDetector
 import java.io.File
 
 /** A [MikroMarkdown] with every JVM converter registered and Tika-based format detection. */
-fun MikroMarkdown(): MikroMarkdown =
+public fun MikroMarkdown(): MikroMarkdown =
     MikroMarkdown(TikaMimeDetector).apply {
         register(MarkdownPassthroughConverter())
         register(HtmlConverter())
@@ -30,4 +30,4 @@ fun MikroMarkdown(): MikroMarkdown =
         register(PlainTextConverter(), priority = 10.0)
     }
 
-fun MikroMarkdown.convert(file: File): ConversionResult = convert(file.absolutePath)
+public fun MikroMarkdown.convert(file: File): ConversionResult = convert(file.absolutePath)

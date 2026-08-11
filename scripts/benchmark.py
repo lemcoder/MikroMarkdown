@@ -8,7 +8,8 @@ Usage:
 Engines are skipped (not failed) when their CLI is unavailable:
     mikromarkdown  cli/build/install/cli/bin/cli
     markitdown     `markitdown` on PATH, else `uvx markitdown[all]`
-    anydoc         `anydoc` on PATH, else a local npm install of @firecrawl/anydoc
+    anydoc         `anydoc` on PATH, a cargo build in third-party/anydoc, or a local
+                   npm install of @firecrawl/anydoc
 
 Metrics per output:
     content recall  tokens agreed on by >=2 engines that this engine also emits
@@ -87,6 +88,7 @@ def which_engines() -> list[Engine]:
     anydoc_bin = shutil.which("anydoc")
     if not anydoc_bin:
         for candidate in (
+            REPO / "third-party/anydoc/target/release/anydoc",
             REPO / "build/anydoc/node_modules/.bin/anydoc",
             Path("/tmp/anydoc-bench/node_modules/.bin/anydoc"),
         ):

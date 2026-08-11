@@ -33,7 +33,7 @@ import org.openxmlformats.schemas.drawingml.x2006.chart.CTScatterSer
 import org.openxmlformats.schemas.drawingml.x2006.chart.CTSerTx
 import org.openxmlformats.schemas.presentationml.x2006.main.CTPicture
 
-class PptxConverter : DocumentConverter {
+public class PptxConverter : DocumentConverter {
     override fun accepts(bytes: ByteArray, info: StreamInfo): Boolean {
         return info.extension == "pptx" ||
             info.mimetype == "application/vnd.openxmlformats-officedocument.presentationml.presentation"

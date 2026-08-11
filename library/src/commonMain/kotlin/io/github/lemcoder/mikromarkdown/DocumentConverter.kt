@@ -7,8 +7,8 @@ import io.github.lemcoder.mikromarkdown.model.Document
  *
  * Converters never produce Markdown — rendering is [io.github.lemcoder.mikromarkdown.render.MarkdownRenderer]'s job.
  */
-interface DocumentConverter {
-    fun accepts(bytes: ByteArray, info: StreamInfo): Boolean
+public interface DocumentConverter {
+    public fun accepts(bytes: ByteArray, info: StreamInfo): Boolean
 
-    fun parse(bytes: ByteArray, info: StreamInfo): Document
+    public fun parse(bytes: ByteArray, info: StreamInfo): Document
 }

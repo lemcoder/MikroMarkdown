@@ -34,7 +34,8 @@ bytes ──► MimeDetector ──► DocumentConverter.parse ──► Documen
 ```
 
 Converters contain no Markdown syntax, so escaping, table shaping, list indentation and spacing are
-fixed once for all formats. The model is public: `mid.parse(path)` returns the `Document`, and
+fixed once for all formats. JVM and Android share one `jvmShared` source set, so a converter exists
+once rather than per target; only PDF extraction and MIME detection are platform-specific. The model is public: `mid.parse(path)` returns the `Document`, and
 `ConversionResult.document` exposes it alongside the rendered Markdown.
 
 ```kotlin
@@ -134,11 +135,23 @@ Both extend `MikroMarkdownException`.
 |---|---|---|
 | [ktfmt](https://github.com/facebook/ktfmt) | `./gradlew ktfmtFormat` / `ktfmtCheck` | formatting (kotlinlang style, 120 columns) |
 | [detekt](https://detekt.dev) | `./gradlew detekt` | static analysis; overrides in `config/detekt/detekt.yml` |
-| [Konsist](https://docs.konsist.lemonappdev.com) | `./gradlew :library:jvmTest --tests '*ArchitectureTest*'` | pipeline boundaries |
+| [Konsist](https://docs.konsist.lemonappdev.com) | `./gradlew :library:jvmTest --tests '*ArchitectureTest*'` | pipeline boundaries and encapsulation |
 
-`./gradlew check` runs all three. The Konsist rules encode the architecture: the model depends on
-nothing, converters never import the renderer, and Markdown syntax appears only under `render/` —
-so a converter cannot quietly start building Markdown strings again.
+`./gradlew check` runs all three. The library also builds in Kotlin's
+[explicit API mode](https://kotlinlang.org/docs/whatsnew14.html#explicit-api-mode-for-library-authors),
+so every exported declaration states its visibility and return type.
+
+The Konsist rules in `ArchitectureTest` encode the architecture, and each one is verified to fail
+against a deliberate violation:
+
+*Layering* — the model depends on nothing and stays free of `java.*`/`android.*`; converters never
+import the renderer or each other; Markdown syntax appears only under `render/`.
+
+*Encapsulation* — helpers under `utils` are never public, the model exposes no mutable state, and
+every `DocumentConverter` is named `*Converter` and lives in `converters`.
+
+*Hygiene* — no wildcard imports, no printing from library code, and no source file duplicated
+between source sets (the drift that the `jvmShared` set removed).
 
 ktfmt-gradle only derives tasks for the common and JVM source sets, so `library/build.gradle.kts`
 registers matching tasks for the Android ones.

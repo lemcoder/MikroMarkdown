@@ -12,30 +12,31 @@ import kotlinx.io.readByteArray
  *
  * Rendering happens here rather than inside converters, so every format shares one serializer.
  */
-class MikroMarkdown(
+public class MikroMarkdown(
     private val mimeDetector: MimeDetector,
     private val renderer: MarkdownRenderer = MarkdownRenderer.Default,
 ) {
-    private val converters = mutableListOf<Pair<DocumentConverter, Double>>()
+    private val converters = ConverterRegistry()
 
-    fun register(converter: DocumentConverter, priority: Double = 0.0) {
-        converters.add(converter to priority)
+    /** Lower priority runs first; [io.github.lemcoder.mikromarkdown.converters.PlainTextConverter] uses 10.0. */
+    public fun register(converter: DocumentConverter, priority: Double = 0.0) {
+        converters.register(converter, priority)
     }
 
-    fun convert(path: String): ConversionResult = render(parse(path))
+    public fun convert(path: String): ConversionResult = render(parse(path))
 
-    fun convert(bytes: ByteArray, info: StreamInfo): ConversionResult = render(parse(bytes, info))
+    public fun convert(bytes: ByteArray, info: StreamInfo): ConversionResult = render(parse(bytes, info))
 
     /** Parses without rendering, for callers that want the document model itself. */
-    fun parse(path: String): Document {
+    public fun parse(path: String): Document {
         val info = mimeDetector.detect(path)
         val bytes = SystemFileSystem.source(Path(path)).buffered().use { it.readByteArray() }
         return parse(bytes, info)
     }
 
-    fun parse(bytes: ByteArray, info: StreamInfo): Document {
+    public fun parse(bytes: ByteArray, info: StreamInfo): Document {
         val converter =
-            converters.sortedBy { it.second }.firstOrNull { (candidate, _) -> candidate.accepts(bytes, info) }?.first
+            converters.select(bytes, info)
                 ?: throw UnsupportedFormatException(
                     "No converter found for: ${info.extension ?: info.mimetype ?: "unknown"}"
                 )
@@ -53,7 +54,7 @@ class MikroMarkdown(
             throw FileConversionException("Conversion failed with ${this::class.simpleName}: ${e.message}", e)
         }
 
-    fun render(document: Document): ConversionResult =
+    public fun render(document: Document): ConversionResult =
         ConversionResult(
             markdown = renderer.render(document),
             title = document.title,

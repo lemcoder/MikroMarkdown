@@ -10,7 +10,7 @@ import io.github.lemcoder.mikromarkdown.StreamInfo
 import io.github.lemcoder.mikromarkdown.model.CodeBlock
 import io.github.lemcoder.mikromarkdown.model.Document
 
-class JsonConverter : DocumentConverter {
+public class JsonConverter : DocumentConverter {
     private val writer =
         ObjectMapper()
             .apply { registerKotlinModule() }

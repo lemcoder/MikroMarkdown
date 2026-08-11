@@ -1,6 +1,6 @@
 package io.github.lemcoder.mikromarkdown
 
-data class StreamInfo(
+public data class StreamInfo(
     val mimetype: String? = null,
     val extension: String? = null,
     val charset: String? = null,

@@ -11,6 +11,9 @@ group = "io.github.lemcoder"
 version = "0.1.0"
 
 kotlin {
+    // Public API must be spelled out: visibility and return types, no accidental exports.
+    explicitApi()
+
     jvm {
         compilerOptions { jvmTarget = JvmTarget.JVM_21 }
         testRuns["test"].executionTask.configure { useJUnitPlatform() }
@@ -30,21 +33,29 @@ kotlin {
     sourceSets {
         commonMain.dependencies { implementation(libs.kotlinx.io.core) }
 
-        jvmMain.dependencies {
-            implementation(libs.jsoup)
-            implementation(libs.jackson.kotlin)
-            implementation(libs.commons.csv)
-            implementation(libs.poi.ooxml)
-            implementation(libs.tika.core)
-            implementation(libs.pdfbox)
+        // JVM and Android run the same parsers on the same libraries; only PDF and MIME
+        // detection differ. Converters live here once instead of being copied per target.
+        val jvmShared by creating {
+            dependsOn(commonMain.get())
+            dependencies {
+                implementation(libs.jsoup)
+                implementation(libs.jackson.kotlin)
+                implementation(libs.commons.csv)
+                implementation(libs.poi.ooxml)
+            }
         }
 
-        androidMain.dependencies {
-            implementation(libs.jsoup)
-            implementation(libs.jackson.kotlin)
-            implementation(libs.commons.csv)
-            implementation(libs.poi.ooxml)
-            implementation(libs.pdfbox.android)
+        jvmMain {
+            dependsOn(jvmShared)
+            dependencies {
+                implementation(libs.tika.core)
+                implementation(libs.pdfbox)
+            }
+        }
+
+        androidMain {
+            dependsOn(jvmShared)
+            dependencies { implementation(libs.pdfbox.android) }
         }
 
         commonTest.dependencies {

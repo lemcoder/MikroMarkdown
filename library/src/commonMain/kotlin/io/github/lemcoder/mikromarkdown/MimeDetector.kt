@@ -1,5 +1,5 @@
 package io.github.lemcoder.mikromarkdown
 
-fun interface MimeDetector {
-    fun detect(path: String): StreamInfo
+public fun interface MimeDetector {
+    public fun detect(path: String): StreamInfo
 }

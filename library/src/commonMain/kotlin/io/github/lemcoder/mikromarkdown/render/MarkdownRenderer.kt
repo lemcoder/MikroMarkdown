@@ -25,7 +25,7 @@ import io.github.lemcoder.mikromarkdown.model.TableCell
 import io.github.lemcoder.mikromarkdown.model.Text
 import io.github.lemcoder.mikromarkdown.model.ThematicBreak
 
-data class MarkdownOptions(
+public data class MarkdownOptions(
     val bullet: Char = '-',
     val strongMarker: String = "**",
     val emphasisMarker: String = "*",
@@ -43,24 +43,24 @@ data class MarkdownOptions(
     /** Longest image URL kept inline; longer ones (e.g. base64 data URIs) are still emitted. */
     val maxInlineImageUrl: Int = Int.MAX_VALUE,
 ) {
-    companion object {
-        val Default = MarkdownOptions()
+    public companion object {
+        public val Default: MarkdownOptions = MarkdownOptions()
     }
 }
 
 /** Serializes a [Document] to GitHub-Flavored Markdown. The only place Markdown syntax is produced. */
-class MarkdownRenderer(private val options: MarkdownOptions = MarkdownOptions.Default) {
+public class MarkdownRenderer(private val options: MarkdownOptions = MarkdownOptions.Default) {
 
-    fun render(document: Document): String {
+    public fun render(document: Document): String {
         val body = renderBlocks(document.blocks)
         if (!options.frontMatter || document.metadata.isEmpty()) return body
         val front = document.metadata.entries.joinToString("\n") { (k, v) -> "$k: ${v.replace("\n", " ")}" }
         return "---\n$front\n---\n\n$body".trimEnd()
     }
 
-    fun render(blocks: List<Block>): String = renderBlocks(blocks)
+    public fun render(blocks: List<Block>): String = renderBlocks(blocks)
 
-    fun renderInline(inlines: List<Inline>): String = inlines(inlines, TextContext.INLINE)
+    public fun renderInline(inlines: List<Inline>): String = inlines(inlines, TextContext.INLINE)
 
     private fun renderBlocks(blocks: List<Block>): String {
         val chunks = mutableListOf<String>()
@@ -379,7 +379,7 @@ class MarkdownRenderer(private val options: MarkdownOptions = MarkdownOptions.De
         TABLE,
     }
 
-    companion object {
-        val Default = MarkdownRenderer()
+    public companion object {
+        public val Default: MarkdownRenderer = MarkdownRenderer()
     }
 }

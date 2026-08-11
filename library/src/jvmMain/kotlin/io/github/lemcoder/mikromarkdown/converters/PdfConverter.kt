@@ -7,7 +7,7 @@ import io.github.lemcoder.mikromarkdown.utils.plainTextBlocks
 import org.apache.pdfbox.Loader
 import org.apache.pdfbox.text.PDFTextStripper
 
-class PdfConverter : DocumentConverter {
+public class PdfConverter : DocumentConverter {
     override fun accepts(bytes: ByteArray, info: StreamInfo): Boolean {
         return info.extension == "pdf" || info.mimetype == "application/pdf"
     }
