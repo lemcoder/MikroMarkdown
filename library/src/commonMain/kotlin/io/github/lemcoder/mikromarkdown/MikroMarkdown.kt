@@ -34,24 +34,24 @@ class MikroMarkdown(
     }
 
     fun parse(bytes: ByteArray, info: StreamInfo): Document {
-        val sorted = converters.sortedBy { it.second }
-        for ((converter, _) in sorted) {
-            if (!converter.accepts(bytes, info)) continue
-            return try {
-                converter.parse(bytes, info)
-            } catch (e: MarkItDownException) {
-                throw e
-            } catch (e: Exception) {
-                throw FileConversionException(
-                    "Conversion failed with ${converter::class.simpleName}: ${e.message}",
-                    e,
+        val converter =
+            converters.sortedBy { it.second }.firstOrNull { (candidate, _) -> candidate.accepts(bytes, info) }?.first
+                ?: throw UnsupportedFormatException(
+                    "No converter found for: ${info.extension ?: info.mimetype ?: "unknown"}"
                 )
-            }
-        }
-        throw UnsupportedFormatException(
-            "No converter found for: ${info.extension ?: info.mimetype ?: "unknown"}",
-        )
+
+        return converter.parseOrFail(bytes, info)
     }
+
+    /** Converter failures surface as [FileConversionException]; our own exceptions pass through. */
+    private fun DocumentConverter.parseOrFail(bytes: ByteArray, info: StreamInfo): Document =
+        try {
+            parse(bytes, info)
+        } catch (e: MikroMarkdownException) {
+            throw e
+        } catch (e: Exception) {
+            throw FileConversionException("Conversion failed with ${this::class.simpleName}: ${e.message}", e)
+        }
 
     fun render(document: Document): ConversionResult =
         ConversionResult(

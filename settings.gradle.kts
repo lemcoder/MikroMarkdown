@@ -14,5 +14,7 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "mikromarkdown"
+
 include(":library")
+
 include(":cli")

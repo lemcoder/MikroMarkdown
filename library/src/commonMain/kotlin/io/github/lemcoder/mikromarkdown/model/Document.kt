@@ -3,9 +3,8 @@ package io.github.lemcoder.mikromarkdown.model
 /**
  * Format-independent document model.
  *
- * Every converter parses its input into a [Document]; a single renderer turns
- * documents into Markdown. Output quirks are therefore fixed once, in the
- * renderer, rather than per format.
+ * Every converter parses its input into a [Document]; a single renderer turns documents into Markdown. Output quirks
+ * are therefore fixed once, in the renderer, rather than per format.
  */
 data class Document(
     val blocks: List<Block> = emptyList(),
@@ -70,7 +69,12 @@ data class TableCell(
     constructor(text: String) : this(if (text.isEmpty()) emptyList() else listOf(Text(text)))
 }
 
-enum class Alignment { NONE, LEFT, CENTER, RIGHT }
+enum class Alignment {
+    NONE,
+    LEFT,
+    CENTER,
+    RIGHT,
+}
 
 data object ThematicBreak : Block
 

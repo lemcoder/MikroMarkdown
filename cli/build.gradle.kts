@@ -3,21 +3,13 @@ plugins {
     application
 }
 
-java {
-    toolchain {
-        languageVersion = JavaLanguageVersion.of(21)
-    }
-}
+java { toolchain { languageVersion = JavaLanguageVersion.of(21) } }
 
-application {
-    mainClass = "com.mikromarkdown.cli.MainKt"
-}
+application { mainClass = "com.mikromarkdown.cli.MainKt" }
 
 dependencies {
     implementation(project(":library"))
     implementation(libs.clikt)
 }
 
-tasks.test {
-    useJUnitPlatform()
-}
+tasks.test { useJUnitPlatform() }

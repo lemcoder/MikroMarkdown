@@ -7,16 +7,13 @@ plugins {
 }
 
 group = "io.github.lemcoder"
+
 version = "0.1.0"
 
 kotlin {
     jvm {
-        compilerOptions {
-            jvmTarget = JvmTarget.JVM_21
-        }
-        testRuns["test"].executionTask.configure {
-            useJUnitPlatform()
-        }
+        compilerOptions { jvmTarget = JvmTarget.JVM_21 }
+        testRuns["test"].executionTask.configure { useJUnitPlatform() }
     }
 
     androidLibrary {
@@ -25,19 +22,13 @@ kotlin {
         minSdk = libs.versions.android.minSdk.get().toInt()
 
         withHostTestBuilder {}.configure {}
-        withDeviceTestBuilder {
-            sourceSetTreeName = "test"
-        }
+        withDeviceTestBuilder { sourceSetTreeName = "test" }
 
-        compilerOptions {
-            jvmTarget = JvmTarget.JVM_11
-        }
+        compilerOptions { jvmTarget = JvmTarget.JVM_11 }
     }
 
     sourceSets {
-        commonMain.dependencies {
-            implementation(libs.kotlinx.io.core)
-        }
+        commonMain.dependencies { implementation(libs.kotlinx.io.core) }
 
         jvmMain.dependencies {
             implementation(libs.jsoup)
@@ -64,6 +55,31 @@ kotlin {
         jvmTest.dependencies {
             implementation(libs.junit.jupiter)
             implementation(libs.kotlin.test)
+            implementation(libs.konsist)
         }
     }
+}
+
+// ktfmt-gradle only derives tasks for the common and JVM source sets, so the Android
+// ones — where half the converters live — would go unformatted and unchecked.
+run {
+    val androidSources = fileTree("src") { include("android*/**/*.kt") }
+    val template = tasks.named<com.ncorti.ktfmt.gradle.tasks.KtfmtFormatTask>("ktfmtFormatKmpCommonMain")
+
+    val formatAndroid =
+        tasks.register<com.ncorti.ktfmt.gradle.tasks.KtfmtFormatTask>("ktfmtFormatAndroidSourceSets") {
+            ktfmtClasspath.from(template.map { it.ktfmtClasspath })
+            formattingOptionsBean.set(template.flatMap { it.formattingOptionsBean })
+            setSource(androidSources)
+        }
+    val checkAndroid =
+        tasks.register<com.ncorti.ktfmt.gradle.tasks.KtfmtCheckTask>("ktfmtCheckAndroidSourceSets") {
+            ktfmtClasspath.from(template.map { it.ktfmtClasspath })
+            formattingOptionsBean.set(template.flatMap { it.formattingOptionsBean })
+            setSource(androidSources)
+        }
+
+    tasks.named("ktfmtFormat") { dependsOn(formatAndroid) }
+    tasks.named("ktfmtCheck") { dependsOn(checkAndroid) }
+    tasks.named("check") { dependsOn(checkAndroid) }
 }

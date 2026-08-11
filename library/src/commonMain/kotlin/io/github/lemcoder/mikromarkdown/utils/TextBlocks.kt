@@ -7,8 +7,8 @@ import io.github.lemcoder.mikromarkdown.model.Text
 /**
  * Turns extracted plain text (PDF pages, speaker notes, …) into paragraph blocks.
  *
- * Blank lines separate paragraphs; soft-wrapped lines inside a paragraph are rejoined,
- * so the Markdown does not inherit the source layout's line breaks.
+ * Blank lines separate paragraphs; soft-wrapped lines inside a paragraph are rejoined, so the Markdown does not inherit
+ * the source layout's line breaks.
  */
 fun plainTextBlocks(text: String, reflow: Boolean = true): List<Block> {
     // Form feeds mark PDF page breaks; treat them as paragraph boundaries.
@@ -32,21 +32,18 @@ fun plainTextBlocks(text: String, reflow: Boolean = true): List<Block> {
     return paragraphs.map { Paragraph(listOf(Text(it))) }
 }
 
-private fun String.endsWithWordBreak(): Boolean =
-    endsWith("-") && length > 1 && this[length - 2].isLetter()
+private fun String.endsWithWordBreak(): Boolean = endsWith("-") && length > 1 && this[length - 2].isLetter()
 
 private val WORD = Regex("[\\p{L}]{2,}")
 
 /** Words the document uses on their own; the de-hyphenation heuristic consults this. */
-private fun wordsIn(text: String): Set<String> =
-    WORD.findAll(text).map { it.value.lowercase() }.toSet()
+private fun wordsIn(text: String): Set<String> = WORD.findAll(text).map { it.value.lowercase() }.toSet()
 
 /**
  * Rejoins soft-wrapped lines.
  *
- * A trailing hyphen is dropped only when it looks like a wrap artifact: if both fragments are
- * words the document uses elsewhere on their own (`conversation-` + `centric`), the hyphen is a
- * real compound and stays.
+ * A trailing hyphen is dropped only when it looks like a wrap artifact: if both fragments are words the document uses
+ * elsewhere on their own (`conversation-` + `centric`), the hyphen is a real compound and stays.
  */
 private fun joinWrappedLines(lines: List<String>, vocabulary: Set<String>): String {
     val sb = StringBuilder()

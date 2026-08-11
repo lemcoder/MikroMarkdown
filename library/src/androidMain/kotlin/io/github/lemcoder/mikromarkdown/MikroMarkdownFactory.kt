@@ -16,21 +16,27 @@ import io.github.lemcoder.mikromarkdown.converters.XmlConverter
 import io.github.lemcoder.mikromarkdown.utils.AndroidMimeDetector
 import java.io.File
 
-fun MarkItDown(context: Context? = null): MikroMarkdown = MikroMarkdown(AndroidMimeDetector).apply {
-    register(MarkdownPassthroughConverter())
-    register(HtmlConverter())
-    register(CsvConverter())
-    register(JsonConverter())
-    register(XmlConverter())
-    register(DocxConverter())
-    register(XlsxConverter())
-    register(PptxConverter())
-    register(EpubConverter())
-    if (context != null) {
-        PDFBoxResourceLoader.init(context)
-        register(PdfConverter())
+/**
+ * A [MikroMarkdown] with every Android converter registered.
+ *
+ * PDF support needs a [Context]: pdfbox-android loads its resources from the app's assets.
+ */
+fun MikroMarkdown(context: Context? = null): MikroMarkdown =
+    MikroMarkdown(AndroidMimeDetector).apply {
+        register(MarkdownPassthroughConverter())
+        register(HtmlConverter())
+        register(CsvConverter())
+        register(JsonConverter())
+        register(XmlConverter())
+        register(DocxConverter())
+        register(XlsxConverter())
+        register(PptxConverter())
+        register(EpubConverter())
+        if (context != null) {
+            PDFBoxResourceLoader.init(context)
+            register(PdfConverter())
+        }
+        register(PlainTextConverter(), priority = 10.0)
     }
-    register(PlainTextConverter(), priority = 10.0)
-}
 
 fun MikroMarkdown.convert(file: File): ConversionResult = convert(file.absolutePath)
