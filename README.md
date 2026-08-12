@@ -212,16 +212,13 @@ Whole-process, best of eight, converting CSV of increasing size:
 
 | input | Kotlin/Native | anydoc (Rust binary) | anydoc (npm, via Node) | JVM CLI |
 |---|---|---|---|---|
-| 1 KB | 3 ms | 3 ms | 21 ms | 63 ms |
-| 55 KB | 5 ms | 5 ms | 24 ms | 65 ms |
-| 172 KB | 10 ms | 10 ms | 30 ms | 73 ms |
-| 580 KB | 29 ms | 27 ms | 45 ms | 95 ms |
-| 1.8 MB | 86 ms | 73 ms | 93 ms | 151 ms |
-| 3.5 MB | 171 ms | 141 ms | 163 ms | 222 ms |
+| 55 KB | 5 ms | 6 ms | 24 ms | 62 ms |
+| 580 KB | 27 ms | 26 ms | 45 ms | 77 ms |
+| 1.8 MB | 76 ms | 72 ms | 93 ms | 115 ms |
+| 3.5 MB | 145 ms | 141 ms | 163 ms | 167 ms |
 
-Kotlin/Native matches the Rust binary exactly up to about 172 KB — both are process startup at that
-point — and trails it by 7% at 580 KB, growing to 21% at 3.5 MB. Against the JVM CLI it is 12x
-faster on small inputs and still ahead at 3.5 MB.
+Kotlin/Native lands within 3-6% of the Rust binary at every size, and is 12x faster than the JVM CLI
+on small inputs.
 
 Three changes closed the throughput gap that the first cut of this target showed:
 
@@ -293,6 +290,13 @@ nothing measurable. The 0.6 ms between the two runtimes is initialization, not s
 
 Replacing clikt with hand-rolled argument parsing removes 147 loaded classes and about 2 ms — inside
 the noise, and not worth losing its help output and error handling. The dependency stays.
+
+Zero-copy parsing made things slower, which is the most useful negative result here. Handing the
+renderer a `CharSequence` window onto the source instead of a substring removes one allocation per
+cell, but every character access then goes through an interface call rather than `String`'s direct
+indexing — and the renderer reads every character anyway to decide whether it needs escaping. A
+1.8 MB CSV went from 86 ms to 118 ms on native and 126 ms to 154 ms on the JVM. Rust gets this for
+free because `&str` slices index directly; Kotlin does not. Reverted.
 
 ## Benchmark
 

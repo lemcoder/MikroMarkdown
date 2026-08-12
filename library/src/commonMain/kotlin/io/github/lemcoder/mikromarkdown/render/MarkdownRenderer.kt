@@ -153,7 +153,7 @@ public class MarkdownRenderer(private val options: MarkdownOptions = MarkdownOpt
     }
 
     /** Appends [text], re-emitting [prefix] after each newline it contains. */
-    private fun appendLines(out: StringBuilder, text: String, prefix: String) {
+    private fun appendLines(out: StringBuilder, text: CharSequence, prefix: String) {
         for (char in text) if (char == '\n') newLine(out, prefix) else out.append(char)
     }
 
@@ -202,8 +202,8 @@ public class MarkdownRenderer(private val options: MarkdownOptions = MarkdownOpt
     }
 
     /** GFM has no colspan: a spanning cell keeps its text and the covered columns render empty. */
-    private fun expandSpans(cells: List<TableCell>): List<String> {
-        val out = ArrayList<String>(cells.size)
+    private fun expandSpans(cells: List<TableCell>): List<CharSequence> {
+        val out = ArrayList<CharSequence>(cells.size)
         for (cell in cells) {
             out += cellText(cell)
             repeat((cell.colSpan - 1).coerceAtLeast(0)) { out += "" }
@@ -211,15 +211,26 @@ public class MarkdownRenderer(private val options: MarkdownOptions = MarkdownOpt
         return out
     }
 
-    private fun cellText(cell: TableCell): String {
-        val rendered = inlines(cell.content, TextContext.TABLE)
+    private fun cellText(cell: TableCell): CharSequence {
+        val only = cell.content.singleOrNull()
+        val rendered: CharSequence =
+            if (only is Text) {
+                escape(only.value, TextContext.TABLE, atLineStart = false)
+            } else {
+                inlines(cell.content, TextContext.TABLE)
+            }
         // Single-line cells are the overwhelming majority; splitting them would allocate a list
         // and rejoin it to reach the same string.
         if (rendered.indexOf('\n') < 0 && rendered.indexOf('\r') < 0) return rendered.trim()
-        return rendered.replace("\r\n", "\n").lines().joinToString(options.tableCellLineBreak) { it.trim() }.trim()
+        return rendered
+            .toString()
+            .replace("\r\n", "\n")
+            .lines()
+            .joinToString(options.tableCellLineBreak) { it.trim() }
+            .trim()
     }
 
-    private fun pad(cells: List<String>, columns: Int): List<String> =
+    private fun pad(cells: List<CharSequence>, columns: Int): List<CharSequence> =
         // Rows that already match the header — every row of a well-formed table — are passed through.
         when {
             cells.size == columns -> cells
@@ -227,7 +238,7 @@ public class MarkdownRenderer(private val options: MarkdownOptions = MarkdownOpt
             else -> cells + List(columns - cells.size) { "" }
         }
 
-    private fun row(cells: List<String>, widths: List<Int>?): String =
+    private fun row(cells: List<CharSequence>, widths: List<Int>?): String =
         cells
             .mapIndexed { index, cell -> if (widths == null) cell else cell.padEnd(widths[index]) }
             .joinToString(" | ", "| ", " |")
@@ -306,13 +317,18 @@ public class MarkdownRenderer(private val options: MarkdownOptions = MarkdownOpt
     private fun StringBuilder.isAtLineStart(context: TextContext): Boolean =
         context != TextContext.TABLE && (isEmpty() || last() == '\n')
 
-    private fun escape(value: String, context: TextContext, atLineStart: Boolean): String {
+    private fun escape(value: CharSequence, context: TextContext, atLineStart: Boolean): CharSequence {
         // Most text needs neither newline normalization nor escaping. Returning it untouched keeps
         // the common cell — a word or a number — from allocating anything at all.
-        val text = if (value.indexOf('\r') < 0) value else value.replace("\r\n", "\n").replace('\r', '\n')
+        val text: CharSequence =
+            if (value.indexOf('\r') < 0) value else value.toString().replace("\r\n", "\n").replace('\r', '\n')
 
         if (!options.escapeText) {
-            return if (context == TextContext.TABLE && text.indexOf('|') >= 0) text.replace("|", "\\|") else text
+            return if (context == TextContext.TABLE && text.indexOf('|') >= 0) {
+                text.toString().replace("|", "\\|")
+            } else {
+                text
+            }
         }
 
         val first = firstEscapeIndex(text, context, atLineStart)
@@ -327,12 +343,12 @@ public class MarkdownRenderer(private val options: MarkdownOptions = MarkdownOpt
         }
     }
 
-    private fun firstEscapeIndex(text: String, context: TextContext, atLineStart: Boolean): Int {
+    private fun firstEscapeIndex(text: CharSequence, context: TextContext, atLineStart: Boolean): Int {
         for (index in text.indices) if (needsEscape(text, index, context, atLineStart)) return index
         return -1
     }
 
-    private fun needsEscape(text: String, index: Int, context: TextContext, atLineStart: Boolean): Boolean =
+    private fun needsEscape(text: CharSequence, index: Int, context: TextContext, atLineStart: Boolean): Boolean =
         when (val ch = text[index]) {
             '\\',
             '*',
@@ -356,24 +372,24 @@ public class MarkdownRenderer(private val options: MarkdownOptions = MarkdownOpt
             else -> false
         }
 
-    private fun isIntraword(text: String, index: Int): Boolean =
+    private fun isIntraword(text: CharSequence, index: Int): Boolean =
         text.getOrNull(index - 1)?.isLetterOrDigit() == true && text.getOrNull(index + 1)?.isLetterOrDigit() == true
 
     /** True when only indentation separates [index] from the start of its line. */
-    private fun startsLine(text: String, index: Int, atLineStart: Boolean): Boolean {
+    private fun startsLine(text: CharSequence, index: Int, atLineStart: Boolean): Boolean {
         var i = index - 1
         while (i >= 0 && (text[i] == ' ' || text[i] == '\t')) i--
         return if (i < 0) atLineStart else text[i] == '\n'
     }
 
-    private fun followsOrderedListMarker(text: String, index: Int, atLineStart: Boolean): Boolean {
+    private fun followsOrderedListMarker(text: CharSequence, index: Int, atLineStart: Boolean): Boolean {
         var digits = index - 1
         while (digits >= 0 && text[digits].isDigit()) digits--
         if (digits == index - 1) return false
         return startsLine(text, digits + 1, atLineStart) && startsOrderedList(text, index - 1)
     }
 
-    private fun startsOrderedList(text: String, digitIndex: Int): Boolean {
+    private fun startsOrderedList(text: CharSequence, digitIndex: Int): Boolean {
         var start = digitIndex
         while (start > 0 && text[start - 1].isDigit()) start--
         if (start > 0 && !text[start - 1].isWhitespace()) return false
@@ -391,7 +407,7 @@ public class MarkdownRenderer(private val options: MarkdownOptions = MarkdownOpt
      * Searching the whole string for the next semicolon made this quadratic on text holding many ampersands and few
      * semicolons — query strings, for one.
      */
-    private fun looksLikeEntity(text: String, index: Int): Boolean {
+    private fun looksLikeEntity(text: CharSequence, index: Int): Boolean {
         val limit = minOf(text.length, index + 1 + MAX_ENTITY_LENGTH)
         for (position in index + 1 until limit) {
             val char = text[position]
@@ -403,7 +419,7 @@ public class MarkdownRenderer(private val options: MarkdownOptions = MarkdownOpt
 
     private fun encodeUrl(url: String): String = url.replace(" ", "%20").replace("(", "%28").replace(")", "%29")
 
-    private fun longestBacktickRun(text: String): Int {
+    private fun longestBacktickRun(text: CharSequence): Int {
         var longest = 0
         var current = 0
         for (ch in text) {
