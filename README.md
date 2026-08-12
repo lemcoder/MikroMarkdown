@@ -179,11 +179,16 @@ In-process, best of 50 runs after warmup:
 | test.pptx | 271 KB | 4.79 ms | 0.00 ms | 4.53 ms |
 | test_wikipedia.html | 385 KB | 12.98 ms | 1.82 ms | 14.80 ms |
 
-End to end the CLI runs in 100–240 ms, against ~25 ms for the Rust
+End to end the CLI runs in 100–240 ms, against 3–6 ms for the Rust
 [anydoc](https://github.com/firecrawl/anydoc) and 410–540 ms for Python markitdown. Nearly all of
 what is left is process startup: `java -version` alone costs 41 ms on the same machine, and the
 conversion is under 5 ms for every fixture but Wikipedia. Matching a native binary would take
 ahead-of-time compilation, not a faster pipeline.
+
+Note when reproducing this: anydoc's npm package is a Node script loading a napi module, so timing
+`node_modules/.bin/anydoc` charges Node's 15 ms startup to Rust and reads as ~22 ms flat. The
+figures here come from its Rust binary, built from the vendored source with
+`cargo build --release --example convert`.
 
 The CLI therefore optimizes startup rather than throughput:
 
@@ -205,14 +210,18 @@ other target, and its output is byte-identical to the JVM CLI's.
 
 Whole-process, best of eight, converting CSV of increasing size:
 
-| input | native | anydoc (Rust) | JVM CLI |
-|---|---|---|---|
-| 1 KB | **3 ms** | 21 ms | 63 ms |
-| 55 KB | **6 ms** | 25 ms | 65 ms |
-| 172 KB | **10 ms** | 30 ms | 77 ms |
-| 580 KB | **29 ms** | 47 ms | 99 ms |
-| 1.8 MB | **87 ms** | 94 ms | 152 ms |
-| 3.5 MB | 176 ms | **161 ms** | 223 ms |
+| input | Kotlin/Native | anydoc (Rust binary) | anydoc (npm, via Node) | JVM CLI |
+|---|---|---|---|---|
+| 1 KB | 3 ms | 3 ms | 21 ms | 63 ms |
+| 55 KB | 5 ms | 5 ms | 24 ms | 65 ms |
+| 172 KB | 10 ms | 10 ms | 30 ms | 73 ms |
+| 580 KB | 29 ms | 27 ms | 45 ms | 95 ms |
+| 1.8 MB | 86 ms | 73 ms | 93 ms | 151 ms |
+| 3.5 MB | 171 ms | 141 ms | 163 ms | 222 ms |
+
+Kotlin/Native matches the Rust binary exactly up to about 172 KB — both are process startup at that
+point — and trails it by 7% at 580 KB, growing to 21% at 3.5 MB. Against the JVM CLI it is 12x
+faster on small inputs and still ahead at 3.5 MB.
 
 Three changes closed the throughput gap that the first cut of this target showed:
 
