@@ -230,10 +230,28 @@ is why peak memory is 125 MB for a 1.8 MB input. A genuinely zero-copy model —
 slices of the source buffer rather than copies — is the next lever, and a deeper change.
 
 Compiler flags were measured rather than guessed. `-Xbinary=preCodegenInlineThreshold=40` is worth
-about 8% on large inputs and ships; every GC binary option tried was neutral or worse, so the
-defaults stay. The exception is `gcSchedulerType=manual`, which is 20% faster on 1.8 MB because a
-process that exits never needs to collect — but peak memory climbs to 169 MB there and grows
-without bound on larger inputs, so it is documented rather than enabled.
+about 8% on large inputs and ships. Every garbage collection setting tried was worse than the
+default, and the collector is the interesting part of the story, so the numbers are below.
+
+Converting 20 documents of 580 KB in one process:
+
+| policy | time | peak RSS |
+|---|---|---|
+| default (adaptive) | 543 ms | 59 MB |
+| `gcSchedulerType=manual`, never collecting | 428 ms | 954 MB |
+| `gcSchedulerType=manual`, collecting between documents | 485 ms | 67 MB |
+| `autotune = false` with a heap ceiling | 1246 ms | 43 MB |
+
+A manual collector is genuinely faster, since a process that exits never needs to collect, and a
+document boundary is the one place where everything the previous conversion allocated is provably
+dead. But it only bounds growth *between* documents: a single large input still has nothing
+collecting mid-parse, so the 3.5 MB file takes 228 MB either way and a much larger one would grow
+until it failed. Turning `autotune` off is far worse than it looks like it should be — 8.6x on a
+single 3.5 MB file — and the ceiling value makes no difference to that, so `targetHeapBytes` is not
+behaving as its name suggests.
+
+The default collector ships. The native CLI does accept several files per invocation, which is what
+would make a manual policy workable if the trade ever becomes worth it.
 
 ## Benchmark
 
