@@ -21,7 +21,7 @@ import org.apache.poi.xwpf.usermodel.XWPFDocument
 import org.apache.poi.xwpf.usermodel.XWPFParagraph
 import org.apache.poi.xwpf.usermodel.XWPFTable
 
-class DocxConverter : DocumentConverter {
+public class DocxConverter : DocumentConverter {
     override fun accepts(bytes: ByteArray, info: StreamInfo): Boolean {
         return info.extension == "docx" ||
             info.mimetype == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"

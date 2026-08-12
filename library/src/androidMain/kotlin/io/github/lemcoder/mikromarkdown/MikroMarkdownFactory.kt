@@ -21,7 +21,7 @@ import java.io.File
  *
  * PDF support needs a [Context]: pdfbox-android loads its resources from the app's assets.
  */
-fun MikroMarkdown(context: Context? = null): MikroMarkdown =
+public fun MikroMarkdown(context: Context? = null): MikroMarkdown =
     MikroMarkdown(AndroidMimeDetector).apply {
         register(MarkdownPassthroughConverter())
         register(HtmlConverter())
@@ -39,4 +39,4 @@ fun MikroMarkdown(context: Context? = null): MikroMarkdown =
         register(PlainTextConverter(), priority = 10.0)
     }
 
-fun MikroMarkdown.convert(file: File): ConversionResult = convert(file.absolutePath)
+public fun MikroMarkdown.convert(file: File): ConversionResult = convert(file.absolutePath)

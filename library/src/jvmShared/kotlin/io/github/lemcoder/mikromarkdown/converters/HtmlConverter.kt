@@ -5,7 +5,7 @@ import io.github.lemcoder.mikromarkdown.StreamInfo
 import io.github.lemcoder.mikromarkdown.model.Document
 import io.github.lemcoder.mikromarkdown.utils.HtmlToDocument
 
-class HtmlConverter : DocumentConverter {
+public class HtmlConverter : DocumentConverter {
     override fun accepts(bytes: ByteArray, info: StreamInfo): Boolean {
         return info.extension in setOf("html", "htm") || info.mimetype in setOf("text/html", "application/xhtml+xml")
     }

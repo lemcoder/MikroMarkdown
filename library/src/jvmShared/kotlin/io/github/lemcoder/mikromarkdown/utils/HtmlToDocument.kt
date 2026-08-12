@@ -32,7 +32,7 @@ import org.jsoup.nodes.TextNode
  * Replaces the previous HTML → Markdown string conversion: tables, lists and inline emphasis become model nodes, so the
  * Markdown renderer owns all syntax decisions.
  */
-object HtmlToDocument {
+internal object HtmlToDocument {
 
     private val DROPPED_TAGS =
         setOf(
@@ -73,7 +73,7 @@ object HtmlToDocument {
             "colgroup",
         )
 
-    fun parse(html: String, baseUri: String = ""): Document {
+    internal fun parse(html: String, baseUri: String = ""): Document {
         val doc = Jsoup.parse(html, baseUri)
         doc.select(DROPPED_TAGS.joinToString(", ")).remove()
         val title = doc.title().ifBlank { null }

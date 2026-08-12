@@ -5,7 +5,7 @@ import io.github.lemcoder.mikromarkdown.MimeDetector
 import io.github.lemcoder.mikromarkdown.StreamInfo
 import java.io.File
 
-object AndroidMimeDetector : MimeDetector {
+internal object AndroidMimeDetector : MimeDetector {
     override fun detect(path: String): StreamInfo {
         val file = File(path)
         val extension = file.extension.lowercase().ifEmpty { null }

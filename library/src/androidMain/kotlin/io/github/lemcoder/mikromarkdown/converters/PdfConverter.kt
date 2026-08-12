@@ -7,7 +7,7 @@ import io.github.lemcoder.mikromarkdown.StreamInfo
 import io.github.lemcoder.mikromarkdown.model.Document
 import io.github.lemcoder.mikromarkdown.utils.plainTextBlocks
 
-class PdfConverter : DocumentConverter {
+public class PdfConverter : DocumentConverter {
     override fun accepts(bytes: ByteArray, info: StreamInfo): Boolean {
         return info.extension == "pdf" || info.mimetype == "application/pdf"
     }

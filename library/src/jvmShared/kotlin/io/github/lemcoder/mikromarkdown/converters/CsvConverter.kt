@@ -9,7 +9,7 @@ import java.io.InputStreamReader
 import org.apache.commons.csv.CSVFormat
 import org.apache.commons.csv.CSVParser
 
-class CsvConverter : DocumentConverter {
+public class CsvConverter : DocumentConverter {
     override fun accepts(bytes: ByteArray, info: StreamInfo): Boolean {
         return info.extension == "csv" || info.mimetype in setOf("text/csv", "application/csv")
     }

@@ -11,69 +11,76 @@ package io.github.lemcoder.mikromarkdown.model
  * }
  * ```
  */
-fun document(block: DocumentBuilder.() -> Unit): Document = DocumentBuilder().apply(block).build()
+/** Restricts builder receivers so an inline block cannot silently call document-level methods. */
+@DslMarker public annotation class DocumentDsl
 
-class DocumentBuilder {
+@DocumentDsl public fun document(block: DocumentBuilder.() -> Unit): Document = DocumentBuilder().apply(block).build()
+
+@DocumentDsl
+public class DocumentBuilder {
     private val blocks = mutableListOf<Block>()
     private val assets = mutableListOf<Asset>()
     private val metadata = mutableMapOf<String, String>()
-    var title: String? = null
+    private var title: String? = null
 
-    fun add(block: Block) {
+    public fun add(block: Block) {
         blocks += block
     }
 
-    fun addAll(blocks: Iterable<Block>) {
+    public fun addAll(blocks: Iterable<Block>) {
         this.blocks += blocks
     }
 
-    fun asset(asset: Asset) {
+    public fun asset(asset: Asset) {
         assets += asset
     }
 
-    fun meta(key: String, value: String?) {
+    public fun meta(key: String, value: String?) {
         if (!value.isNullOrBlank()) metadata[key] = value
     }
 
     /** Records [text] as the document title unless one was already found. */
-    fun titleIfAbsent(text: String?) {
+    public fun titleIfAbsent(text: String?) {
         if (title == null && !text.isNullOrBlank()) title = text
     }
 
-    fun heading(level: Int, text: String) {
+    /** The title recorded so far, if any. */
+    public fun title(): String? = title
+
+    public fun heading(level: Int, text: String) {
         if (text.isNotBlank()) add(Heading(level, listOf(Text(text))))
     }
 
-    fun heading(level: Int, content: List<Inline>) {
+    public fun heading(level: Int, content: List<Inline>) {
         if (content.isNotEmpty()) add(Heading(level, content))
     }
 
-    fun paragraph(text: String) {
+    public fun paragraph(text: String) {
         if (text.isNotBlank()) add(Paragraph(listOf(Text(text))))
     }
 
-    fun paragraph(content: List<Inline>) {
+    public fun paragraph(content: List<Inline>) {
         if (content.isNotEmpty()) add(Paragraph(content))
     }
 
-    fun code(code: String, language: String? = null) {
+    public fun code(code: String, language: String? = null) {
         add(CodeBlock(code, language))
     }
 
-    fun comment(text: String) {
+    public fun comment(text: String) {
         add(HtmlComment(text))
     }
 
-    fun raw(text: String) {
+    public fun raw(text: String) {
         if (text.isNotBlank()) add(RawBlock(text))
     }
 
-    fun bulletList(items: List<String>) {
+    public fun bulletList(items: List<String>) {
         if (items.isEmpty()) return
         add(ListBlock(ordered = false, items = items.map { ListItem(listOf(Paragraph(listOf(Text(it))))) }))
     }
 
-    fun table(
+    public fun table(
         header: List<String>,
         rows: List<List<String>>,
         alignments: List<Alignment> = emptyList(),
@@ -88,7 +95,7 @@ class DocumentBuilder {
         )
     }
 
-    fun build(): Document =
+    public fun build(): Document =
         Document(
             blocks = blocks.toList(),
             title = title,
@@ -98,52 +105,53 @@ class DocumentBuilder {
 }
 
 /** Builds a list of inlines without repeating `listOf(...)` wrappers in parsers. */
-fun inlines(block: InlineBuilder.() -> Unit): List<Inline> = InlineBuilder().apply(block).build()
+@DocumentDsl public fun inlines(block: InlineBuilder.() -> Unit): List<Inline> = InlineBuilder().apply(block).build()
 
-class InlineBuilder {
+@DocumentDsl
+public class InlineBuilder {
     private val items = mutableListOf<Inline>()
 
-    fun text(value: String) {
+    public fun text(value: String) {
         if (value.isNotEmpty()) items += Text(value)
     }
 
-    fun strong(value: String) {
+    public fun strong(value: String) {
         if (value.isNotEmpty()) items += Strong(listOf(Text(value)))
     }
 
-    fun emphasis(value: String) {
+    public fun emphasis(value: String) {
         if (value.isNotEmpty()) items += Emphasis(listOf(Text(value)))
     }
 
-    fun code(value: String) {
+    public fun code(value: String) {
         if (value.isNotEmpty()) items += CodeSpan(value)
     }
 
-    fun link(text: String, url: String) {
+    public fun link(text: String, url: String) {
         items += Link(listOf(Text(text)), url)
     }
 
-    fun image(alt: String, url: String, assetId: String? = null) {
+    public fun image(alt: String, url: String, assetId: String? = null) {
         items += Image(alt, url, assetId = assetId)
     }
 
-    fun lineBreak() {
+    public fun lineBreak() {
         items += LineBreak
     }
 
-    operator fun plusAssign(inline: Inline) {
+    public operator fun plusAssign(inline: Inline) {
         items += inline
     }
 
-    operator fun plusAssign(inlines: List<Inline>) {
+    public operator fun plusAssign(inlines: List<Inline>) {
         items += inlines
     }
 
-    fun build(): List<Inline> = items.toList()
+    public fun build(): List<Inline> = items.toList()
 }
 
 /** Wraps [content] in the emphasis combination described by the flags. */
-fun styled(content: List<Inline>, bold: Boolean, italic: Boolean, strike: Boolean = false): List<Inline> {
+public fun styled(content: List<Inline>, bold: Boolean, italic: Boolean, strike: Boolean = false): List<Inline> {
     var result = content
     if (strike) result = listOf(Strikethrough(result))
     if (italic) result = listOf(Emphasis(result))

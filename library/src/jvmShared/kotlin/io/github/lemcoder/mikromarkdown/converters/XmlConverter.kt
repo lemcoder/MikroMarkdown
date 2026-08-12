@@ -13,7 +13,7 @@ import javax.xml.transform.dom.DOMSource
 import javax.xml.transform.stream.StreamResult
 import org.xml.sax.InputSource
 
-class XmlConverter : DocumentConverter {
+public class XmlConverter : DocumentConverter {
     override fun accepts(bytes: ByteArray, info: StreamInfo): Boolean {
         return info.extension == "xml" || info.mimetype in setOf("text/xml", "application/xml")
     }
