@@ -193,6 +193,31 @@ The CLI therefore optimizes startup rather than throughput:
 - it compiles with C1 only (`-XX:TieredStopAtLevel=1`), since C2 never pays for itself in a run this
   short. Embedders using the library get the normal JIT.
 
+### Kotlin/Native spike
+
+`:cli-native` builds a macOS binary carrying the converters that need no JVM library — CSV, JSON,
+XML, plain text and Markdown passthrough. It shares the model, renderer and pipeline with every
+other target, and its output is byte-identical to the JVM CLI's.
+
+```bash
+./gradlew :cli-native:linkReleaseExecutableMacosArm64
+```
+
+Whole-process, best of six, converting CSV of increasing size:
+
+| input | native | anydoc (Rust) | JVM CLI |
+|---|---|---|---|
+| 1 KB | **3 ms** | 21 ms | 61 ms |
+| 55 KB | **10 ms** | 25 ms | 73 ms |
+| 172 KB | **25 ms** | 30 ms | 82 ms |
+| 580 KB | 75 ms | **47 ms** | 114 ms |
+| 1.8 MB | 237 ms | **93 ms** | 193 ms |
+
+Startup is where a native binary wins and it wins outright: 3 ms against anydoc's 21 ms. Throughput
+is where it loses — Kotlin/Native's allocation and GC costs run about 2x the JVM's on the per-cell
+work of a large table, so anydoc leads from ~250 KB and the JVM CLI overtakes it around 1.5 MB.
+Most documents are far below that crossover.
+
 ## Benchmark
 
 `scripts/benchmark.py` converts the test fixtures with MikroMarkdown, Python

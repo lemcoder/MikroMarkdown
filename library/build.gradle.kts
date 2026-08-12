@@ -4,6 +4,7 @@ plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.android.kotlin.multiplatform.library)
     alias(libs.plugins.kotlinx.resources)
+    alias(libs.plugins.kotlin.serialization)
 }
 
 group = "io.github.lemcoder"
@@ -14,10 +15,18 @@ kotlin {
     // Public API must be spelled out: visibility and return types, no accidental exports.
     explicitApi()
 
+    // Declaring jvmShared by hand switches off the automatic hierarchy, which macosMain needs.
+    applyDefaultHierarchyTemplate()
+
     jvm {
         compilerOptions { jvmTarget = JvmTarget.JVM_21 }
         testRuns["test"].executionTask.configure { useJUnitPlatform() }
     }
+
+    // Spike: a native target to see how close a real binary gets to the Rust implementation.
+    // The shared integration tests expect JVM-only formats, so native test compilation stays off
+    // until the native target carries real converters.
+    macosArm64 { compilations.getByName("test") { compileTaskProvider.configure { enabled = false } } }
 
     androidLibrary {
         namespace = "io.github.lemcoder.mikromarkdown"
@@ -32,6 +41,9 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies { implementation(libs.kotlinx.io.core) }
+
+        // Formats that need no platform library at all: CSV, JSON and XML are parsed here.
+        macosMain.dependencies { implementation(libs.kotlinx.serialization.json) }
 
         // JVM and Android run the same parsers on the same libraries; only PDF and MIME
         // detection differ. Converters live here once instead of being copied per target.
