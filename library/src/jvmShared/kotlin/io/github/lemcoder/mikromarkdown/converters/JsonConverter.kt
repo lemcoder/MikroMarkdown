@@ -11,21 +11,23 @@ import io.github.lemcoder.mikromarkdown.model.CodeBlock
 import io.github.lemcoder.mikromarkdown.model.Document
 
 public class JsonConverter : DocumentConverter {
-    private val writer =
-        ObjectMapper()
-            .apply { registerKotlinModule() }
-            .writer(
-                object : DefaultPrettyPrinter() {
-                    init {
-                        indentArraysWith(DefaultIndenter("    ", "\n"))
-                        indentObjectsWith(DefaultIndenter("    ", "\n"))
-                    }
+    // Constructing a converter must not load Jackson: accepts() only looks at the extension.
+    private val mapper by lazy { ObjectMapper().apply { registerKotlinModule() } }
 
-                    override fun createInstance() = this
-
-                    override fun writeObjectFieldValueSeparator(g: JsonGenerator) = g.writeRaw(": ")
+    private val writer by lazy {
+        mapper.writer(
+            object : DefaultPrettyPrinter() {
+                init {
+                    indentArraysWith(DefaultIndenter("    ", "\n"))
+                    indentObjectsWith(DefaultIndenter("    ", "\n"))
                 }
-            )
+
+                override fun createInstance() = this
+
+                override fun writeObjectFieldValueSeparator(g: JsonGenerator) = g.writeRaw(": ")
+            }
+        )
+    }
 
     override fun accepts(bytes: ByteArray, info: StreamInfo): Boolean {
         return info.extension == "json" || info.mimetype in setOf("application/json", "text/json")
@@ -35,7 +37,7 @@ public class JsonConverter : DocumentConverter {
         val json = bytes.toString(Charsets.UTF_8)
         val pretty =
             try {
-                writer.writeValueAsString(ObjectMapper().readTree(json))
+                writer.writeValueAsString(mapper.readTree(json))
             } catch (_: Exception) {
                 json
             }

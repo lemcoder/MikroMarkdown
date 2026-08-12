@@ -15,7 +15,9 @@ import kotlin.test.assertEquals
  */
 class ArchitectureTest {
 
-    private val scope = Konsist.scopeFromProject()
+    // These rules describe the library's architecture. The CLI and benchmark modules are
+    // applications: they print, and their entry points are allowed to be called Main.kt.
+    private val scope = Konsist.scopeFromModule("library")
     private val production = scope.files.filterNot { it.path.contains("Test") }
 
     // ---- layering -------------------------------------------------------------------------

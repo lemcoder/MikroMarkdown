@@ -48,6 +48,11 @@ internal object HtmlToDocument {
             "select",
         )
 
+    private val DROPPED_SELECTOR = DROPPED_TAGS.joinToString(", ")
+
+    /** Compiled once: this runs for every text node in the document. */
+    private val COLLAPSIBLE_WHITESPACE = Regex("\\s+")
+
     private val HEADINGS = mapOf("h1" to 1, "h2" to 2, "h3" to 3, "h4" to 4, "h5" to 5, "h6" to 6)
 
     /** Tags that only group other content; their children are lifted into the parent block flow. */
@@ -75,7 +80,7 @@ internal object HtmlToDocument {
 
     internal fun parse(html: String, baseUri: String = ""): Document {
         val doc = Jsoup.parse(html, baseUri)
-        doc.select(DROPPED_TAGS.joinToString(", ")).remove()
+        doc.select(DROPPED_SELECTOR).remove()
         val title = doc.title().ifBlank { null }
         val root = doc.body() ?: doc
         val blocks = blocks(root)
@@ -226,8 +231,18 @@ internal object HtmlToDocument {
         return listOf(Table(header = header, rows = body, caption = caption))
     }
 
-    /** The nearest enclosing table, so nested tables do not steal each other's rows. */
-    private fun Element.parentTable(): Element? = parents().firstOrNull { it.tagName() == "table" }
+    /**
+     * The nearest enclosing table, so nested tables do not steal each other's rows. Walks the parent chain directly:
+     * Jsoup's parents() allocates a list per call, and this runs once per row.
+     */
+    private fun Element.parentTable(): Element? {
+        var parent = parent()
+        while (parent != null) {
+            if (parent.tagName() == "table") return parent
+            parent = parent.parent()
+        }
+        return null
+    }
 
     private fun inlines(element: Element): List<Inline> {
         val out = mutableListOf<Inline>()
@@ -295,7 +310,7 @@ internal object HtmlToDocument {
 
     /** HTML collapses runs of whitespace; do the same before the text reaches the model. */
     // Non-breaking spaces are not collapsible whitespace in HTML, so they survive verbatim.
-    private fun TextNode.normalizedText(): String = wholeText.replace(Regex("\\s+"), " ")
+    private fun TextNode.normalizedText(): String = wholeText.replace(COLLAPSIBLE_WHITESPACE, " ")
 
     private fun List<Inline>.startsWithSpace(): Boolean = (firstOrNull() as? Text)?.value?.startsWith(" ") == true
 

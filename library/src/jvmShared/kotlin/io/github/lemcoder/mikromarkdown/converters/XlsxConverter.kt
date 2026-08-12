@@ -15,7 +15,8 @@ import org.apache.poi.ss.usermodel.DataFormatter
 import org.apache.poi.xssf.usermodel.XSSFWorkbook
 
 public class XlsxConverter : DocumentConverter {
-    private val formatter = DataFormatter()
+    // Constructing a converter must not load POI: accepts() only looks at the extension.
+    private val formatter by lazy { DataFormatter() }
 
     override fun accepts(bytes: ByteArray, info: StreamInfo): Boolean {
         return info.extension == "xlsx" ||

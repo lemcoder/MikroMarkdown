@@ -156,6 +156,43 @@ between source sets (the drift that the `jvmShared` set removed).
 ktfmt-gradle only derives tasks for the common and JVM source sets, so `library/build.gradle.kts`
 registers matching tasks for the Android ones.
 
+## Performance
+
+Conversion itself is a few milliseconds; a CLI run is mostly JVM startup and class loading.
+`:benchmark` measures the pipeline in-process, `scripts/benchmark.py` measures whole processes.
+
+```bash
+./gradlew :benchmark:run          # in-process, per stage
+python3 scripts/benchmark.py      # whole process, against markitdown and anydoc
+```
+
+In-process, best of 50 runs after warmup:
+
+| fixture | size | parse | render | total |
+|---|---|---|---|---|
+| test.json | 0.4 KB | 0.03 ms | 0.01 ms | 0.04 ms |
+| test.epub | 2 KB | 0.42 ms | 0.00 ms | 0.42 ms |
+| test_blog.html | 25 KB | 0.85 ms | 0.11 ms | 0.96 ms |
+| test.xlsx | 11 KB | 1.09 ms | 0.00 ms | 1.03 ms |
+| test.docx | 132 KB | 3.28 ms | 0.00 ms | 2.81 ms |
+| test.pdf | 90 KB | 3.69 ms | 0.00 ms | 3.47 ms |
+| test.pptx | 271 KB | 4.79 ms | 0.00 ms | 4.53 ms |
+| test_wikipedia.html | 385 KB | 12.98 ms | 1.82 ms | 14.80 ms |
+
+End to end the CLI runs in 100–240 ms, against ~25 ms for the Rust
+[anydoc](https://github.com/firecrawl/anydoc) and 410–540 ms for Python markitdown. Nearly all of
+what is left is process startup: `java -version` alone costs 41 ms on the same machine, and the
+conversion is under 5 ms for every fixture but Wikipedia. Matching a native binary would take
+ahead-of-time compilation, not a faster pipeline.
+
+The CLI therefore optimizes startup rather than throughput:
+
+- `installDist` records a [class-data-sharing](https://docs.oracle.com/en/java/javase/21/vm/class-data-sharing.html)
+  archive into the distribution, which roughly halves startup. Set `MIKROMARKDOWN_NO_CDS=1` to skip
+  it; the start script also skips it when the archive is missing, so `distZip` still works.
+- it compiles with C1 only (`-XX:TieredStopAtLevel=1`), since C2 never pays for itself in a run this
+  short. Embedders using the library get the normal JIT.
+
 ## Benchmark
 
 `scripts/benchmark.py` converts the test fixtures with MikroMarkdown, Python

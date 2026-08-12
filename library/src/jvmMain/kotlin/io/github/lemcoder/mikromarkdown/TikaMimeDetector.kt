@@ -1,12 +1,17 @@
-package io.github.lemcoder.mikromarkdown.utils
+package io.github.lemcoder.mikromarkdown
 
-import io.github.lemcoder.mikromarkdown.MimeDetector
-import io.github.lemcoder.mikromarkdown.StreamInfo
 import java.io.File
 import org.apache.tika.Tika
 
-internal object TikaMimeDetector : MimeDetector {
-    private val tika = Tika()
+/**
+ * Full content sniffing through Apache Tika's MIME registry.
+ *
+ * Slower to start than [SignatureMimeDetector] — building the registry costs about 90 ms, more than converting most
+ * documents — but it recognises text formats by content rather than by extension.
+ */
+public object TikaMimeDetector : MimeDetector {
+    // Building Tika's MIME registry is expensive; convert(bytes, info) never needs it.
+    private val tika by lazy { Tika() }
 
     override fun detect(path: String): StreamInfo {
         val file = File(path)
