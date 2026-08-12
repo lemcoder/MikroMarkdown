@@ -4,7 +4,6 @@ plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.android.kotlin.multiplatform.library)
     alias(libs.plugins.kotlinx.resources)
-    alias(libs.plugins.kotlin.serialization)
 }
 
 group = "io.github.lemcoder"
@@ -42,17 +41,12 @@ kotlin {
     sourceSets {
         commonMain.dependencies { implementation(libs.kotlinx.io.core) }
 
-        // Formats that need no platform library at all: CSV, JSON and XML are parsed here.
-        macosMain.dependencies { implementation(libs.kotlinx.serialization.json) }
-
         // JVM and Android run the same parsers on the same libraries; only PDF and MIME
         // detection differ. Converters live here once instead of being copied per target.
         val jvmShared by creating {
             dependsOn(commonMain.get())
             dependencies {
                 implementation(libs.jsoup)
-                implementation(libs.jackson.kotlin)
-                implementation(libs.commons.csv)
                 implementation(libs.poi.ooxml)
             }
         }

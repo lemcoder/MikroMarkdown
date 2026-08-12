@@ -232,6 +232,12 @@ Three changes closed the throughput gap that the first cut of this target showed
 - **The native CSV reader slices instead of accumulating.** Fields are ranges in the decoded text,
   so a field costs one substring rather than a per-character builder plus a separate trim. Only
   fields containing escaped quotes, which cannot be a slice of the input, assemble a string.
+- **CSV, JSON and XML moved to `commonMain`**, taking commons-csv, Jackson and
+  kotlinx-serialization with them. One implementation now serves every target: a slicing CSV reader,
+  a JSON re-indenter that copies tokens verbatim so `1.50` does not become `1.5`, and an XML
+  formatter. A JSON conversion loads 1214 classes instead of 2063, the native binary is 1.3 MB
+  instead of 2.2 MB, and the JVM CLI converts JSON in 56 ms instead of 95 ms. Output is unchanged
+  on every fixture.
 - **Two quadratics in the renderer are gone.** Blocks are written into one buffer carrying a line
   prefix, rather than each block returning a string that its parent splits into lines and re-joins —
   which charged the deepest content once per level of nesting above it. And the entity check now
@@ -271,6 +277,22 @@ behaving as its name suggests.
 
 The default collector ships. The native CLI does accept several files per invocation, which is what
 would make a manual policy workable if the trade ever becomes worth it.
+
+### What did not help
+
+Binary size does not drive startup, so shrinking it is not a performance lever:
+
+| binary | size | startup |
+|---|---|---|
+| Kotlin/Native hello world | 485 KB | 3.2 ms |
+| this CLI | 1.3 MB | 3.5 ms |
+| anydoc (Rust) | 6 MB | 2.6 ms |
+
+A 6 MB Rust binary starts faster than a 485 KB Kotlin/Native one, and stripping ours changed
+nothing measurable. The 0.6 ms between the two runtimes is initialization, not size.
+
+Replacing clikt with hand-rolled argument parsing removes 147 loaded classes and about 2 ms — inside
+the noise, and not worth losing its help output and error handling. The dependency stays.
 
 ## Benchmark
 
