@@ -116,16 +116,7 @@ class ArchitectureTest {
      */
     @Test
     fun `production files are not copied between source sets`() {
-        val expectedPerTarget =
-            setOf(
-                "MikroMarkdownFactory",
-                "PdfConverter",
-                // Native re-implementations of the dependency-free formats. They exist twice until
-                // the JVM build drops commons-csv, Jackson and javax.xml for the shared versions.
-                "CsvConverter",
-                "JsonConverter",
-                "XmlConverter",
-            )
+        val expectedPerTarget = setOf("MikroMarkdownFactory", "PdfConverter")
 
         val copied =
             production.filter { it.path.contains("/src/") }.groupBy { it.name }.filterValues { it.size > 1 }.keys -
