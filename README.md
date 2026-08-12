@@ -203,20 +203,37 @@ other target, and its output is byte-identical to the JVM CLI's.
 ./gradlew :cli-native:linkReleaseExecutableMacosArm64
 ```
 
-Whole-process, best of six, converting CSV of increasing size:
+Whole-process, best of eight, converting CSV of increasing size:
 
 | input | native | anydoc (Rust) | JVM CLI |
 |---|---|---|---|
-| 1 KB | **3 ms** | 21 ms | 61 ms |
-| 55 KB | **10 ms** | 25 ms | 73 ms |
-| 172 KB | **25 ms** | 30 ms | 82 ms |
-| 580 KB | 75 ms | **47 ms** | 114 ms |
-| 1.8 MB | 237 ms | **93 ms** | 193 ms |
+| 1 KB | **3 ms** | 21 ms | 63 ms |
+| 55 KB | **6 ms** | 25 ms | 65 ms |
+| 172 KB | **10 ms** | 30 ms | 77 ms |
+| 580 KB | **29 ms** | 47 ms | 99 ms |
+| 1.8 MB | **87 ms** | 94 ms | 152 ms |
+| 3.5 MB | 176 ms | **161 ms** | 223 ms |
 
-Startup is where a native binary wins and it wins outright: 3 ms against anydoc's 21 ms. Throughput
-is where it loses — Kotlin/Native's allocation and GC costs run about 2x the JVM's on the per-cell
-work of a large table, so anydoc leads from ~250 KB and the JVM CLI overtakes it around 1.5 MB.
-Most documents are far below that crossover.
+Two changes closed the throughput gap that the first cut of this target showed:
+
+- **The renderer stopped allocating when it has nothing to change.** Escaping now scans for the
+  first character that needs a backslash and returns the input untouched when there is none, and a
+  single-line table cell skips the split-and-rejoin. Ordinary cells — a word, a number — now cost no
+  allocation at all. This is shared code, so the JVM got faster too.
+- **The native CSV reader slices instead of accumulating.** Fields are ranges in the decoded text,
+  so a field costs one substring rather than a per-character builder plus a separate trim. Only
+  fields containing escaped quotes, which cannot be a slice of the input, assemble a string.
+
+Together those took a 1.8 MB CSV from 237 ms to 87 ms. Kotlin/Native's remaining cost is the
+document model itself: every cell becomes a `TableCell` holding a `Text` holding a `String`, which
+is why peak memory is 125 MB for a 1.8 MB input. A genuinely zero-copy model — inlines holding
+slices of the source buffer rather than copies — is the next lever, and a deeper change.
+
+Compiler flags were measured rather than guessed. `-Xbinary=preCodegenInlineThreshold=40` is worth
+about 8% on large inputs and ships; every GC binary option tried was neutral or worse, so the
+defaults stay. The exception is `gcSchedulerType=manual`, which is 20% faster on 1.8 MB because a
+process that exits never needs to collect — but peak memory climbs to 169 MB there and grows
+without bound on larger inputs, so it is documented rather than enabled.
 
 ## Benchmark
 

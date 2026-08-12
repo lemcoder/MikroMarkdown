@@ -185,7 +185,7 @@ public class MarkdownRenderer(private val options: MarkdownOptions = MarkdownOpt
 
     /** GFM has no colspan: a spanning cell keeps its text and the covered columns render empty. */
     private fun expandSpans(cells: List<TableCell>): List<String> {
-        val out = mutableListOf<String>()
+        val out = ArrayList<String>(cells.size)
         for (cell in cells) {
             out += cellText(cell)
             repeat((cell.colSpan - 1).coerceAtLeast(0)) { out += "" }
@@ -193,15 +193,21 @@ public class MarkdownRenderer(private val options: MarkdownOptions = MarkdownOpt
         return out
     }
 
-    private fun cellText(cell: TableCell): String =
-        inlines(cell.content, TextContext.TABLE)
-            .replace("\r\n", "\n")
-            .lines()
-            .joinToString(options.tableCellLineBreak) { it.trim() }
-            .trim()
+    private fun cellText(cell: TableCell): String {
+        val rendered = inlines(cell.content, TextContext.TABLE)
+        // Single-line cells are the overwhelming majority; splitting them would allocate a list
+        // and rejoin it to reach the same string.
+        if (rendered.indexOf('\n') < 0 && rendered.indexOf('\r') < 0) return rendered.trim()
+        return rendered.replace("\r\n", "\n").lines().joinToString(options.tableCellLineBreak) { it.trim() }.trim()
+    }
 
     private fun pad(cells: List<String>, columns: Int): List<String> =
-        if (cells.size >= columns) cells.take(columns) else cells + List(columns - cells.size) { "" }
+        // Rows that already match the header — every row of a well-formed table — are passed through.
+        when {
+            cells.size == columns -> cells
+            cells.size > columns -> cells.take(columns)
+            else -> cells + List(columns - cells.size) { "" }
+        }
 
     private fun row(cells: List<String>, widths: List<Int>?): String =
         cells
@@ -283,16 +289,29 @@ public class MarkdownRenderer(private val options: MarkdownOptions = MarkdownOpt
         context != TextContext.TABLE && (isEmpty() || last() == '\n')
 
     private fun escape(value: String, context: TextContext, atLineStart: Boolean): String {
-        val text = value.replace("\r\n", "\n").replace('\r', '\n')
+        // Most text needs neither newline normalization nor escaping. Returning it untouched keeps
+        // the common cell — a word or a number — from allocating anything at all.
+        val text = if (value.indexOf('\r') < 0) value else value.replace("\r\n", "\n").replace('\r', '\n')
+
         if (!options.escapeText) {
-            return if (context == TextContext.TABLE) text.replace("|", "\\|") else text
+            return if (context == TextContext.TABLE && text.indexOf('|') >= 0) text.replace("|", "\\|") else text
         }
-        return buildString(text.length) {
-            for (index in text.indices) {
+
+        val first = firstEscapeIndex(text, context, atLineStart)
+        if (first < 0) return text
+
+        return buildString(text.length + ESCAPE_HEADROOM) {
+            append(text, 0, first)
+            for (index in first until text.length) {
                 if (needsEscape(text, index, context, atLineStart)) append('\\')
                 append(text[index])
             }
         }
+    }
+
+    private fun firstEscapeIndex(text: String, context: TextContext, atLineStart: Boolean): Int {
+        for (index in text.indices) if (needsEscape(text, index, context, atLineStart)) return index
+        return -1
     }
 
     private fun needsEscape(text: String, index: Int, context: TextContext, atLineStart: Boolean): Boolean =
@@ -383,5 +402,8 @@ public class MarkdownRenderer(private val options: MarkdownOptions = MarkdownOpt
         public val Default: MarkdownRenderer = MarkdownRenderer()
 
         private val BLANK_LINES = Regex("\n{3,}")
+
+        /** Room for a few backslashes before the builder has to grow. */
+        private const val ESCAPE_HEADROOM = 8
     }
 }
