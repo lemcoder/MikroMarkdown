@@ -214,7 +214,7 @@ Whole-process, best of eight, converting CSV of increasing size:
 | 1.8 MB | **87 ms** | 94 ms | 152 ms |
 | 3.5 MB | 176 ms | **161 ms** | 223 ms |
 
-Two changes closed the throughput gap that the first cut of this target showed:
+Three changes closed the throughput gap that the first cut of this target showed:
 
 - **The renderer stopped allocating when it has nothing to change.** Escaping now scans for the
   first character that needs a backslash and returns the input untouched when there is none, and a
@@ -223,6 +223,16 @@ Two changes closed the throughput gap that the first cut of this target showed:
 - **The native CSV reader slices instead of accumulating.** Fields are ranges in the decoded text,
   so a field costs one substring rather than a per-character builder plus a separate trim. Only
   fields containing escaped quotes, which cannot be a slice of the input, assemble a string.
+- **Two quadratics in the renderer are gone.** Blocks are written into one buffer carrying a line
+  prefix, rather than each block returning a string that its parent splits into lines and re-joins —
+  which charged the deepest content once per level of nesting above it. And the entity check now
+  scans ten characters ahead instead of searching the rest of the document for a semicolon.
+  Measured on inputs built to provoke them, with output byte-identical before and after:
+
+  | pathological input | before | after |
+  |---|---|---|
+  | 400-deep nested lists | 33.03 ms | **0.12 ms** |
+  | 400 ampersands per cell, 789 KB | 9.39 ms | **2.42 ms** |
 
 Together those took a 1.8 MB CSV from 237 ms to 87 ms. Kotlin/Native's remaining cost is the
 document model itself: every cell becomes a `TableCell` holding a `Text` holding a `String`, which
