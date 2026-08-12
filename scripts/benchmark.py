@@ -7,6 +7,7 @@ Usage:
 
 Engines are skipped (not failed) when their CLI is unavailable:
     mikromarkdown  cli/build/install/cli/bin/cli
+    native         cli-native/build/bin/macosArm64/releaseExecutable/cli-native.kexe
     markitdown     `markitdown` on PATH, else `uvx markitdown[all]`
     anydoc         `anydoc` on PATH, a cargo build in third-party/anydoc, or a local
                    npm install of @firecrawl/anydoc
@@ -84,6 +85,17 @@ def which_engines() -> list[Engine]:
     else:
         markitdown = None
     engines.append(Engine("markitdown", markitdown, "" if markitdown else "pip install markitdown[all]"))
+
+    native = REPO / "cli-native/build/bin/macosArm64/releaseExecutable/cli-native.kexe"
+    engines.append(
+        Engine(
+            "native",
+            [str(native)] if native.exists() else None,
+            "" if native.exists() else "run ./gradlew :cli-native:linkReleaseExecutableMacosArm64",
+            # The Kotlin/Native target carries only the converters that need no JVM library.
+            unsupported={"docx", "xlsx", "pptx", "epub", "pdf", "html", "htm"},
+        )
+    )
 
     anydoc_bin = shutil.which("anydoc")
     if not anydoc_bin:
