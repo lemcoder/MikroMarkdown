@@ -76,7 +76,13 @@ val cdsArchive by tasks.registering {
 
     val installDir = layout.buildDirectory.dir("install/${application.applicationName}").get()
     val appName = application.applicationName
-    val sample = rootProject.layout.projectDirectory.file("library/src/commonTest/resources/test_files/test.docx")
+    val fixtures = rootProject.layout.projectDirectory.dir("library/src/commonTest/resources/test_files")
+    // One sample per family, so the archive covers the classes each conversion path touches rather
+    // than only the ones a DOCX happens to need.
+    val samples =
+        listOf("test.docx", "test.pdf", "test_blog.html", "test.csv", "test.json", "test.xlsx").map {
+            fixtures.file(it).asFile.absolutePath
+        }
     val javaHome = javaToolchains.launcherFor(java.toolchain).get().metadata.installationPath
 
     doLast {
@@ -85,15 +91,18 @@ val cdsArchive by tasks.registering {
         val archive = installDir.file("lib/$cdsArchiveName").asFile
         archive.delete()
 
-        providers
-            .exec {
-                commandLine(script.absolutePath, sample.asFile.absolutePath)
-                environment("JAVA_OPTS", "-XX:DumpLoadedClassList=${classList.absolutePath}")
-                environment("MIKROMARKDOWN_NO_CDS", "1")
-            }
-            .standardOutput
-            .asText
-            .get()
+        // One run over one sample of each family: a single list keeps the loader metadata that
+        // makes the archive worth having, which merging separate runs would throw away.
+        val process =
+            ProcessBuilder(listOf(script.absolutePath) + samples)
+                .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+                .also {
+                    it.environment()["JAVA_OPTS"] = "-XX:DumpLoadedClassList=${classList.absolutePath}"
+                    it.environment()["MIKROMARKDOWN_NO_CDS"] = "1"
+                }
+                .start()
+        val errors = process.errorStream.bufferedReader().readText()
+        check(process.waitFor() == 0) { "recording failed: ${errors.take(400)}" }
         check(classList.exists()) { "the JVM recorded no class list" }
 
         val classpath =

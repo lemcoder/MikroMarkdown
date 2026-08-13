@@ -7,9 +7,12 @@ Usage:
 
 Engines are skipped (not failed) when their CLI is unavailable:
     mikromarkdown  cli/build/install/cli/bin/cli
+    native         cli-native/build/bin/macosArm64/releaseExecutable/cli-native.kexe
     markitdown     `markitdown` on PATH, else `uvx markitdown[all]`
-    anydoc         `anydoc` on PATH, a cargo build in third-party/anydoc, or a local
-                   npm install of @firecrawl/anydoc
+    anydoc-rust    third-party/anydoc/target/release/examples/convert (cargo build
+                   --release --example convert) — the Rust binary alone
+    anydoc-node    the npm package, whose CLI is a Node script loading a napi module,
+                   so its timings include Node startup
 
 Metrics per output:
     content recall  tokens agreed on by >=2 engines that this engine also emits
@@ -32,6 +35,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
+# anydoc converts binary document formats only.
+ANYDOC_UNSUPPORTED = {"html", "htm", "json", "xml", "md", "txt"}
+
 TOKEN_SPLIT = re.compile(r"[\s!\"#$%&'()*+,\-./:;<=>?@\[\\\]^_`{|}~]+")
 RUNS = 3
 
@@ -85,10 +91,33 @@ def which_engines() -> list[Engine]:
         markitdown = None
     engines.append(Engine("markitdown", markitdown, "" if markitdown else "pip install markitdown[all]"))
 
+    native = REPO / "cli-native/build/bin/macosArm64/releaseExecutable/cli-native.kexe"
+    engines.append(
+        Engine(
+            "native",
+            [str(native)] if native.exists() else None,
+            "" if native.exists() else "run ./gradlew :cli-native:linkReleaseExecutableMacosArm64",
+            # The Kotlin/Native target carries only the converters that need no JVM library.
+            unsupported={"docx", "xlsx", "pptx", "epub", "pdf", "html", "htm"},
+        )
+    )
+
+    # Two anydoc entry points, because they measure different things: the npm package ships a
+    # napi module that Node loads in-process, so timing it charges Node's ~15 ms startup to Rust.
+    # The cargo-built example is the Rust binary on its own.
+    native_anydoc = REPO / "third-party/anydoc/target/release/examples/convert"
+    engines.append(
+        Engine(
+            "anydoc-rust",
+            [str(native_anydoc)] if native_anydoc.exists() else None,
+            "" if native_anydoc.exists() else "cargo build --release --example convert in third-party/anydoc",
+            unsupported=ANYDOC_UNSUPPORTED,
+        )
+    )
+
     anydoc_bin = shutil.which("anydoc")
     if not anydoc_bin:
         for candidate in (
-            REPO / "third-party/anydoc/target/release/anydoc",
             REPO / "build/anydoc/node_modules/.bin/anydoc",
             Path("/tmp/anydoc-bench/node_modules/.bin/anydoc"),
         ):
@@ -97,11 +126,10 @@ def which_engines() -> list[Engine]:
                 break
     engines.append(
         Engine(
-            "anydoc",
+            "anydoc-node",
             [anydoc_bin] if anydoc_bin else None,
             "" if anydoc_bin else "npm i @firecrawl/anydoc",
-            # anydoc converts binary document formats only.
-            unsupported={"html", "htm", "json", "xml", "md", "txt"},
+            unsupported=ANYDOC_UNSUPPORTED,
         )
     )
     return engines

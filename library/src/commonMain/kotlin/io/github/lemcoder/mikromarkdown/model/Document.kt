@@ -61,12 +61,41 @@ public data class Table(
     val caption: List<Inline> = emptyList(),
 ) : Block
 
-public data class TableCell(
-    val content: List<Inline>,
-    val colSpan: Int = 1,
-    val rowSpan: Int = 1,
+/**
+ * One cell.
+ *
+ * A cell built from plain text keeps the string and materializes [content] only if someone asks: a table of any size
+ * would otherwise allocate a list and a [Text] per cell for the renderer to unwrap again immediately.
+ */
+public class TableCell
+private constructor(
+    private val plain: String?,
+    private val explicit: List<Inline>?,
+    public val colSpan: Int = 1,
+    public val rowSpan: Int = 1,
 ) {
-    public constructor(text: String) : this(if (text.isEmpty()) emptyList() else listOf(Text(text)))
+    public constructor(
+        content: List<Inline>,
+        colSpan: Int = 1,
+        rowSpan: Int = 1,
+    ) : this(null, content, colSpan, rowSpan)
+
+    public constructor(text: String) : this(text.ifEmpty { null }, null)
+
+    public val content: List<Inline>
+        get() = explicit ?: plain?.let { listOf(Text(it)) } ?: emptyList()
+
+    /** The text of a plain cell, for renderers that would only unwrap it again. */
+    internal val plainText: String?
+        get() = plain
+
+    override fun equals(other: Any?): Boolean =
+        this === other ||
+            (other is TableCell && colSpan == other.colSpan && rowSpan == other.rowSpan && content == other.content)
+
+    override fun hashCode(): Int = (content.hashCode() * 31 + colSpan) * 31 + rowSpan
+
+    override fun toString(): String = "TableCell(content=$content, colSpan=$colSpan, rowSpan=$rowSpan)"
 }
 
 public enum class Alignment {

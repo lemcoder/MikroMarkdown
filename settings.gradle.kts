@@ -20,3 +20,5 @@ include(":library")
 include(":cli")
 
 include(":benchmark")
+
+include(":cli-native")
