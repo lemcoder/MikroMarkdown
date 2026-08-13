@@ -14,10 +14,18 @@ kotlin {
     // Public API must be spelled out: visibility and return types, no accidental exports.
     explicitApi()
 
+    // Declaring jvmShared by hand switches off the automatic hierarchy, which macosMain needs.
+    applyDefaultHierarchyTemplate()
+
     jvm {
         compilerOptions { jvmTarget = JvmTarget.JVM_21 }
         testRuns["test"].executionTask.configure { useJUnitPlatform() }
     }
+
+    // Spike: a native target to see how close a real binary gets to the Rust implementation.
+    // The shared integration tests expect JVM-only formats, so native test compilation stays off
+    // until the native target carries real converters.
+    macosArm64 { compilations.getByName("test") { compileTaskProvider.configure { enabled = false } } }
 
     androidLibrary {
         namespace = "io.github.lemcoder.mikromarkdown"
@@ -39,8 +47,6 @@ kotlin {
             dependsOn(commonMain.get())
             dependencies {
                 implementation(libs.jsoup)
-                implementation(libs.jackson.kotlin)
-                implementation(libs.commons.csv)
                 implementation(libs.poi.ooxml)
             }
         }
