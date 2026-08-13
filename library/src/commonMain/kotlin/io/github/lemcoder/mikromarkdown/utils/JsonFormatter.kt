@@ -38,10 +38,10 @@ internal object JsonFormatter {
                     depth++
                     // An empty container stays on one line: "{}" rather than "{\n}".
                     val next = nextMeaningful(json, index + 1)
-                    if (next != null && (next.second == '}' || next.second == ']')) {
-                        out.append(next.second)
+                    if (next >= 0 && (json[next] == '}' || json[next] == ']')) {
+                        out.append(json[next])
                         depth--
-                        index = next.first + 1
+                        index = next + 1
                         afterValue = true
                         continue
                     }
@@ -102,11 +102,12 @@ internal object JsonFormatter {
         return if (index == start) index + 1 else index
     }
 
-    private fun nextMeaningful(json: String, from: Int): Pair<Int, Char>? {
+    /** Index of the next non-space character, or -1. Returning the index avoids allocating a pair. */
+    private fun nextMeaningful(json: String, from: Int): Int {
         for (index in from until json.length) {
-            if (!json[index].isWhitespace()) return index to json[index]
+            if (!json[index].isWhitespace()) return index
         }
-        return null
+        return -1
     }
 
     private val STRUCTURAL = charArrayOf('{', '}', '[', ']', ',', ':')

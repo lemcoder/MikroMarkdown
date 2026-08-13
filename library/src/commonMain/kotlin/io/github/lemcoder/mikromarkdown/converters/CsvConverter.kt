@@ -9,8 +9,8 @@ import io.github.lemcoder.mikromarkdown.model.TableCell
 /**
  * RFC 4180 CSV, parsed directly.
  *
- * The format is small enough that reading it by hand costs less than a dependency would, and the
- * same code then serves every target.
+ * The format is small enough that reading it by hand costs less than a dependency would, and the same code then serves
+ * every target.
  */
 public class CsvConverter : DocumentConverter {
     override fun accepts(bytes: ByteArray, info: StreamInfo): Boolean {
@@ -24,25 +24,20 @@ public class CsvConverter : DocumentConverter {
         val header = records.first()
         if (header.isEmpty()) return Document()
 
-        val rows =
-            records.drop(1).map { record ->
-                // Ragged rows are padded by the renderer; only extra columns need trimming here.
-                List(header.size) { column -> TableCell(record.getOrElse(column) { "" }) }
-            }
-
-        return Document(blocks = listOf(Table(header = header.map { TableCell(it) }, rows = rows)))
+        // Cells are built as the bytes are read, so no second pass allocates them again.
+        return Document(blocks = listOf(Table(header = header, rows = records.drop(1))))
     }
 
     /**
      * Splits the input into records over the raw bytes.
      *
-     * Decoding the whole document first would allocate a UTF-16 copy of it — twice its size — before
-     * a single field is read. The delimiters are all ASCII, and UTF-8 never encodes an ASCII byte as
-     * part of a multi-byte character, so scanning bytes is safe and only the fields are decoded.
+     * Decoding the whole document first would allocate a UTF-16 copy of it — twice its size — before a single field is
+     * read. The delimiters are all ASCII, and UTF-8 never encodes an ASCII byte as part of a multi-byte character, so
+     * scanning bytes is safe and only the fields are decoded.
      */
-    private fun parseRecords(bytes: ByteArray): List<List<String>> {
-        val records = mutableListOf<List<String>>()
-        var record = ArrayList<String>(EXPECTED_COLUMNS)
+    private fun parseRecords(bytes: ByteArray): List<List<TableCell>> {
+        val records = mutableListOf<List<TableCell>>()
+        var record = ArrayList<TableCell>(EXPECTED_COLUMNS)
 
         var fieldStart = 0
         var quoted = false
@@ -58,8 +53,9 @@ public class CsvConverter : DocumentConverter {
         }
 
         fun endRecord(end: Int) {
-            record.add(field(end))
-            if (record.size > 1 || record[0].isNotEmpty()) records += record
+            val last = field(end)
+            record.add(TableCell(last))
+            if (record.size > 1 || last.isNotEmpty()) records += record
             record = ArrayList(EXPECTED_COLUMNS)
         }
 
@@ -80,7 +76,7 @@ public class CsvConverter : DocumentConverter {
 
                 COMMA ->
                     if (!inQuotes) {
-                        record.add(field(index))
+                        record.add(TableCell(field(index)))
                         fieldStart = index + 1
                     }
 

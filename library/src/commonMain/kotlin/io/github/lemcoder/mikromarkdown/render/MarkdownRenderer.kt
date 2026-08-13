@@ -223,12 +223,17 @@ public class MarkdownRenderer(private val options: MarkdownOptions = MarkdownOpt
     }
 
     private fun cellText(cell: TableCell): CharSequence {
-        val only = cell.content.singleOrNull()
+        val plain = cell.plainText
         val rendered: CharSequence =
-            if (only is Text) {
-                escape(only.value, TextContext.TABLE, atLineStart = false)
+            if (plain != null) {
+                escape(plain, TextContext.TABLE, atLineStart = false)
             } else {
-                inlines(cell.content, TextContext.TABLE)
+                val only = cell.content.singleOrNull()
+                if (only is Text) {
+                    escape(only.value, TextContext.TABLE, atLineStart = false)
+                } else {
+                    inlines(cell.content, TextContext.TABLE)
+                }
             }
         // Single-line cells are the overwhelming majority; splitting them would allocate a list
         // and rejoin it to reach the same string.

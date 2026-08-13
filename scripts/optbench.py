@@ -28,7 +28,12 @@ PERF = REPO / "build/perf"
 
 # Native only runs CSV; the JVM champion covers the document formats it cannot.
 TIMED = [("580 KB", PERF / "medium.csv"), ("1.8 MB", PERF / "big.csv")]
-TIMED_JVM = [("wiki", FIXTURES / "test_wikipedia.html"), ("docx", FIXTURES / "test.docx")]
+TIMED_JVM = [
+    ("wiki", FIXTURES / "test_wikipedia.html"),
+    ("docx", FIXTURES / "test.docx"),
+    ("pdf", FIXTURES / "test.pdf"),
+    ("json", PERF / "big.json"),
+]
 ROUNDS = 7
 
 
