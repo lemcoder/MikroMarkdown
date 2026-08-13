@@ -9,8 +9,8 @@ import io.github.lemcoder.mikromarkdown.model.TableCell
 /**
  * RFC 4180 CSV, parsed directly.
  *
- * The JVM build uses commons-csv; on native there is no such library, and the format is small enough that reading it by
- * hand costs less than a dependency would.
+ * The format is small enough that reading it by hand costs less than a dependency would, and the
+ * same code then serves every target.
  */
 public class CsvConverter : DocumentConverter {
     override fun accepts(bytes: ByteArray, info: StreamInfo): Boolean {
@@ -18,7 +18,7 @@ public class CsvConverter : DocumentConverter {
     }
 
     override fun parse(bytes: ByteArray, info: StreamInfo): Document {
-        val records = parseRecords(bytes.decodeToString())
+        val records = parseRecords(bytes)
         if (records.isEmpty()) return Document()
 
         val header = records.first()
@@ -34,13 +34,13 @@ public class CsvConverter : DocumentConverter {
     }
 
     /**
-     * Splits the text into records without building a field at a time.
+     * Splits the input into records over the raw bytes.
      *
-     * Each field is a range in the decoded text, so an ordinary field costs one substring and nothing else — no
-     * per-character builder, no separate trim. Only fields containing escaped quotes, which cannot be a slice of the
-     * input, fall back to assembling a string.
+     * Decoding the whole document first would allocate a UTF-16 copy of it — twice its size — before
+     * a single field is read. The delimiters are all ASCII, and UTF-8 never encodes an ASCII byte as
+     * part of a multi-byte character, so scanning bytes is safe and only the fields are decoded.
      */
-    private fun parseRecords(text: String): List<List<String>> {
+    private fun parseRecords(bytes: ByteArray): List<List<String>> {
         val records = mutableListOf<List<String>>()
         var record = ArrayList<String>(EXPECTED_COLUMNS)
 
@@ -48,9 +48,10 @@ public class CsvConverter : DocumentConverter {
         var quoted = false
         var quoteEscaped = false
         var index = 0
+        var inQuotes = false
 
         fun field(end: Int): String {
-            val raw = slice(text, fieldStart, end, quoted, quoteEscaped)
+            val raw = decodeField(bytes, fieldStart, end, quoted, quoteEscaped)
             quoted = false
             quoteEscaped = false
             return raw
@@ -62,60 +63,68 @@ public class CsvConverter : DocumentConverter {
             record = ArrayList(EXPECTED_COLUMNS)
         }
 
-        var inQuotes = false
-        while (index < text.length) {
-            val char = text[index]
-            when {
-                inQuotes && char == '"' ->
-                    if (text.getOrNull(index + 1) == '"') {
-                        quoteEscaped = true
-                        index++
+        while (index < bytes.size) {
+            when (val byte = bytes[index]) {
+                QUOTE ->
+                    if (inQuotes) {
+                        if (index + 1 < bytes.size && bytes[index + 1] == QUOTE) {
+                            quoteEscaped = true
+                            index++
+                        } else {
+                            inQuotes = false
+                        }
                     } else {
-                        inQuotes = false
+                        inQuotes = true
+                        quoted = true
                     }
 
-                inQuotes -> Unit
-                char == '"' -> {
-                    inQuotes = true
-                    quoted = true
-                }
+                COMMA ->
+                    if (!inQuotes) {
+                        record.add(field(index))
+                        fieldStart = index + 1
+                    }
 
-                char == ',' -> {
-                    record.add(field(index))
-                    fieldStart = index + 1
-                }
-
-                char == '\n' || char == '\r' -> {
-                    endRecord(index)
-                    // Swallow the second half of a CRLF pair.
-                    if (char == '\r' && text.getOrNull(index + 1) == '\n') index++
-                    fieldStart = index + 1
-                }
+                NEWLINE,
+                RETURN ->
+                    if (!inQuotes) {
+                        endRecord(index)
+                        // Swallow the second half of a CRLF pair.
+                        if (byte == RETURN && index + 1 < bytes.size && bytes[index + 1] == NEWLINE) index++
+                        fieldStart = index + 1
+                    }
             }
             index++
         }
-        if (fieldStart < text.length || record.isNotEmpty()) endRecord(text.length)
+        if (fieldStart < bytes.size || record.isNotEmpty()) endRecord(bytes.size)
 
         return records
     }
 
-    /** The field between [start] and [end], unquoted and trimmed, copied only once. */
-    private fun slice(text: String, start: Int, end: Int, quoted: Boolean, quoteEscaped: Boolean): String {
+    /** The field between [start] and [end], unquoted and trimmed, decoded once. */
+    private fun decodeField(bytes: ByteArray, start: Int, end: Int, quoted: Boolean, quoteEscaped: Boolean): String {
         var from = start
         var to = end
-        while (from < to && text[from].isWhitespace()) from++
-        while (to > from && text[to - 1].isWhitespace()) to--
+        while (from < to && bytes[from].isBlank()) from++
+        while (to > from && bytes[to - 1].isBlank()) to--
         if (from >= to) return ""
 
         if (quoted) {
-            if (text[from] == '"') from++
-            if (to > from && text[to - 1] == '"') to--
-            if (quoteEscaped) return text.substring(from, to).replace("\"\"", "\"")
+            if (bytes[from] == QUOTE) from++
+            if (to > from && bytes[to - 1] == QUOTE) to--
+            if (quoteEscaped) return bytes.decodeToString(from, to).replace("\"\"", "\"")
         }
-        return text.substring(from, to)
+        return bytes.decodeToString(from, to)
     }
+
+    private fun Byte.isBlank(): Boolean = this == SPACE || this == TAB || this == NEWLINE || this == RETURN
 
     private companion object {
         const val EXPECTED_COLUMNS = 8
+        const val QUOTE: Byte = '"'.code.toByte()
+        const val COMMA: Byte = ','.code.toByte()
+        const val NEWLINE: Byte = '\n'.code.toByte()
+        const val RETURN: Byte = '\r'.code.toByte()
+        const val SPACE: Byte = ' '.code.toByte()
+        const val TAB: Byte = '\t'.code.toByte()
     }
 }

@@ -154,7 +154,18 @@ public class MarkdownRenderer(private val options: MarkdownOptions = MarkdownOpt
 
     /** Appends [text], re-emitting [prefix] after each newline it contains. */
     private fun appendLines(out: StringBuilder, text: CharSequence, prefix: String) {
-        for (char in text) if (char == '\n') newLine(out, prefix) else out.append(char)
+        // Text without newlines — most paragraphs — is copied in one go rather than per character.
+        var lineStart = 0
+        var index = 0
+        while (index < text.length) {
+            if (text[index] == '\n') {
+                out.append(text, lineStart, index)
+                newLine(out, prefix)
+                lineStart = index + 1
+            }
+            index++
+        }
+        out.append(text, lineStart, text.length)
     }
 
     /**
