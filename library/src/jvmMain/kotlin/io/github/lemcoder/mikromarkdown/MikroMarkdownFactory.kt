@@ -11,12 +11,11 @@ import io.github.lemcoder.mikromarkdown.converters.PlainTextConverter
 import io.github.lemcoder.mikromarkdown.converters.PptxConverter
 import io.github.lemcoder.mikromarkdown.converters.XlsxConverter
 import io.github.lemcoder.mikromarkdown.converters.XmlConverter
-import io.github.lemcoder.mikromarkdown.utils.TikaMimeDetector
 import java.io.File
 
 /** A [MikroMarkdown] with every JVM converter registered and Tika-based format detection. */
 public fun MikroMarkdown(): MikroMarkdown =
-    MikroMarkdown(TikaMimeDetector).apply {
+    MikroMarkdown(SignatureMimeDetector).apply {
         register(MarkdownPassthroughConverter())
         register(HtmlConverter())
         register(CsvConverter())

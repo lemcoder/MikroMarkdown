@@ -102,7 +102,7 @@ public class MarkdownRenderer(private val options: MarkdownOptions = MarkdownOpt
                     .replace("\r\n", "\n")
                     .lines()
                     .joinToString("\n") { it.trimEnd() }
-                    .replace(Regex("\n{3,}"), "\n\n")
+                    .replace(BLANK_LINES, "\n\n")
                     .trim()
         }
 
@@ -381,5 +381,7 @@ public class MarkdownRenderer(private val options: MarkdownOptions = MarkdownOpt
 
     public companion object {
         public val Default: MarkdownRenderer = MarkdownRenderer()
+
+        private val BLANK_LINES = Regex("\n{3,}")
     }
 }

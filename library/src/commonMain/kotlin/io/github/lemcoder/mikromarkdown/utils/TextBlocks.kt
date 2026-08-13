@@ -16,7 +16,7 @@ internal fun plainTextBlocks(text: String, reflow: Boolean = true): List<Block> 
     val vocabulary = if (reflow) wordsIn(normalized) else emptySet()
     val paragraphs = mutableListOf<String>()
 
-    for (chunk in normalized.split(Regex("\n[ \t]*\n"))) {
+    for (chunk in normalized.split(PARAGRAPH_BREAK)) {
         val lines = chunk.lines().map { it.trim() }.filter { it.isNotEmpty() }
         if (lines.isEmpty()) continue
         val joined = if (reflow) joinWrappedLines(lines, vocabulary) else lines.joinToString("\n")
@@ -33,6 +33,8 @@ internal fun plainTextBlocks(text: String, reflow: Boolean = true): List<Block> 
 }
 
 private fun String.endsWithWordBreak(): Boolean = endsWith("-") && length > 1 && this[length - 2].isLetter()
+
+private val PARAGRAPH_BREAK = Regex("\n[ \t]*\n")
 
 private val WORD = Regex("[\\p{L}]{2,}")
 

@@ -18,3 +18,5 @@ rootProject.name = "mikromarkdown"
 include(":library")
 
 include(":cli")
+
+include(":benchmark")
