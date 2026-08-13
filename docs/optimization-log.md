@@ -62,6 +62,10 @@ Nine of twenty-five ideas survived. Against the binary this session started from
 | 1.8 MB CSV | 76 ms | **54 ms** (-30%) |
 | Wikipedia, DOCX, PDF, JSON | — | unchanged |
 
+Measured again on an idle machine for the final comparison, the native CLI runs the 580 KB file in
+19 ms and the 1.8 MB one in 51 ms, against the Rust binary's 25 ms and 71 ms. It began this work
+18-21% behind those.
+
 Almost all of it came from one idea: a table cell that does not wrap its text in a list and a `Text`
 until something asks for them (24), worth -22% on its own. The next largest was the CDS archive
 learning more than one format (11), worth -21% on PDF. Everything else was a percent or two, and

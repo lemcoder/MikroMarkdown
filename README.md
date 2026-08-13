@@ -179,7 +179,7 @@ In-process, best of 50 runs after warmup:
 | test.pptx | 271 KB | 4.79 ms | 0.00 ms | 4.53 ms |
 | test_wikipedia.html | 385 KB | 12.98 ms | 1.82 ms | 14.80 ms |
 
-End to end the CLI runs in 100–240 ms, against 3–6 ms for the Rust
+End to end the CLI runs in 50–230 ms, against 3–5 ms for the Rust
 [anydoc](https://github.com/firecrawl/anydoc) and 410–540 ms for Python markitdown. Nearly all of
 what is left is process startup: `java -version` alone costs 41 ms on the same machine, and the
 conversion is under 5 ms for every fixture but Wikipedia. Matching a native binary would take
@@ -210,15 +210,23 @@ other target, and its output is byte-identical to the JVM CLI's.
 
 Whole-process, best of eight, converting CSV of increasing size:
 
-| input | Kotlin/Native | anydoc (Rust binary) | anydoc (npm, via Node) | JVM CLI |
-|---|---|---|---|---|
-| 55 KB | 5 ms | 6 ms | 24 ms | 62 ms |
-| 580 KB | 27 ms | 26 ms | 45 ms | 77 ms |
-| 1.8 MB | 76 ms | 72 ms | 93 ms | 115 ms |
-| 3.5 MB | 145 ms | 141 ms | 163 ms | 167 ms |
+| input | Kotlin/Native | anydoc (Rust binary) | JVM CLI |
+|---|---|---|---|
+| 1 KB | 3 ms | 3 ms | 51 ms |
+| 55 KB | **4 ms** | 5 ms | 61 ms |
+| 172 KB | **7 ms** | 10 ms | 59 ms |
+| 580 KB | **19 ms** | 25 ms | 70 ms |
+| 1.8 MB | **51 ms** | 71 ms | 101 ms |
+| 3.5 MB | **102 ms** | 139 ms | 142 ms |
 
-Kotlin/Native lands within 3-6% of the Rust binary at every size, and is 12x faster than the JVM CLI
-on small inputs.
+Kotlin/Native is ahead of the Rust binary at every size here, having started the spike 18-21%
+behind on large inputs; `docs/optimization-log.md` records how. Note that anydoc's npm package runs
+through Node, which adds about 18 ms — these figures are its Rust binary, built from the vendored
+source with `cargo build --release --example convert`.
+
+On the document formats the native target does not carry, the JVM CLI converts a DOCX in 180 ms and
+Wikipedia in 122 ms, against anydoc's 3 ms and Python markitdown's 409 ms and 520 ms. That gap is
+process startup, not conversion: in-process those documents take 2.7 ms and 13 ms.
 
 Three changes closed the throughput gap that the first cut of this target showed:
 
