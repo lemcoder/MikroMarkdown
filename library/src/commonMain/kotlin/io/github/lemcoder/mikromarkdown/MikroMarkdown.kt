@@ -29,9 +29,8 @@ public class MikroMarkdown(
 
     /** Parses without rendering, for callers that want the document model itself. */
     public fun parse(path: String): Document {
-        val info = mimeDetector.detect(path)
         val bytes = SystemFileSystem.source(Path(path)).buffered().use { it.readByteArray() }
-        return parse(bytes, info)
+        return parse(bytes, mimeDetector.detect(path, bytes))
     }
 
     public fun parse(bytes: ByteArray, info: StreamInfo): Document {

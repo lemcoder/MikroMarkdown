@@ -41,10 +41,14 @@ public object SignatureMimeDetector : MimeDetector {
     /** ZIP-based formats are told apart by extension; the signature only proves it is a package. */
     private val zipExtensions = setOf("docx", "xlsx", "pptx", "epub", "zip")
 
-    override fun detect(path: String): StreamInfo {
+    override fun detect(path: String): StreamInfo = describe(path, readSignature(path))
+
+    override fun detect(path: String, bytes: ByteArray): StreamInfo =
+        describe(path, if (bytes.size <= SIGNATURE_BYTES) bytes else bytes.copyOf(SIGNATURE_BYTES))
+
+    private fun describe(path: String, signature: ByteArray): StreamInfo {
         val filename = path.substringAfterLast('/').substringAfterLast('\\')
         val extension = filename.substringAfterLast('.', "").lowercase().ifEmpty { null }
-        val signature = readSignature(path)
 
         return StreamInfo(
             mimetype = mimetypeOf(signature, extension),
