@@ -34,6 +34,8 @@ and it then becomes the champion.
 | 7 | `appendLines` copies whole lines rather than one character at a time | first measured as a 23% regression, which turned out to be session drift | **retested as 8** |
 | 8 | same, measured A/B against the champion | native -4% at 1.8 MB, jvm -1% | **kept** |
 | 9 | CSV builds cells directly instead of mapping a second list | +2% at 1.8 MB, nothing elsewhere | **reverted** |
+| 10 | CDS archive trained on six formats, class lists merged from separate runs | wiki -13%, pdf -22%, but json +16% and docx +6%: merging loses the loader metadata | **reverted** |
+| 11 | JVM CLI accepts several files, so one recording run covers every format with metadata intact | pdf 203→160, wiki 139→124, json and csv and docx unchanged | **kept** |
 | 5 | HTML inline runs skip the copy in `trimEdges` when there is nothing to trim | changed EPUB and both HTML outputs, twice, even with a stricter guard — the function does more than its name says | **reverted** |
 
 ## Already settled before this log
