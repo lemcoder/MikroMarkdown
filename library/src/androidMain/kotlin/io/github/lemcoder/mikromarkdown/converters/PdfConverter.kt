@@ -5,7 +5,7 @@ import com.tom_roush.pdfbox.text.PDFTextStripper
 import io.github.lemcoder.mikromarkdown.DocumentConverter
 import io.github.lemcoder.mikromarkdown.StreamInfo
 import io.github.lemcoder.mikromarkdown.model.Document
-import io.github.lemcoder.mikromarkdown.utils.plainTextBlocks
+import io.github.lemcoder.mikromarkdown.model.plainTextBlocks
 
 public class PdfConverter : DocumentConverter {
     override fun accepts(bytes: ByteArray, info: StreamInfo): Boolean {

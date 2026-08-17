@@ -145,9 +145,33 @@ Done, byte-identical, and the JVM-only source set is gone with it. `ZipArchive` 
 the central directory and inflates through korlibs; the container and package documents go through
 Ksoup's XML mode; chapters reuse Phase 1. EPUB now converts on native.
 
-### Phase 3 — PDF, the `:pdfium` module
-Text first, then images and placement. Independent of the OOXML work, so it can run in parallel or
-first if iOS PDF matters more.
+### Phase 3 — PDF, the `:pdfium` module — text done, geometry outstanding
+The binding works: the release is pinned by checksum, unpacked at build time, and the native CLI
+converts a PDF through `PdfiumConverter`. Two notes on getting there — the published dylib names
+itself `./libpdfium.dylib`, which the loader resolves against the working directory, so the unpack
+step rewrites it to `@rpath`; and Kotlin/Native does not carry a klib's linker options to the binary
+that links it, so the consumer names pdfium itself.
+
+Against PDFBox on the same file, pdfium keeps 96.2% of its tokens and the differences are pdfium
+reading *better*: PDFBox leaves `flexibil`, `firming`, `gramming` as fragments where pdfium plus
+de-hyphenation produces whole words.
+
+**Two defects remain, and geometry fixes both.**
+
+pdfium emits U+FFFE where a glyph has no Unicode mapping, which in a typeset paper is the hyphen at
+a line break. Dropping it fuses real compounds (`chat-optimized` → `chatoptimized`); keeping it
+splits real words. The document's own vocabulary decides today, which gets four joins right and two
+compounds wrong — and cannot do better, because the halves of a broken word are only in the text at
+all because the break put them there. **The real discriminator is that a hyphenation hyphen sits at
+the end of a line and a compound hyphen does not**, which `FPDFText_GetCharBox` answers directly.
+
+The same call answers paragraphs. pdfium returns a page as one run of text, so a PDF currently
+renders as a single paragraph where PDFBox produced seven. Character boxes give the line breaks, and
+the vertical gaps between them give the paragraphs.
+
+### Phase 3b — PDF images
+Unstarted. Page objects, the two storage cases, the PNG encoder for raw pixels, and placement by
+bounds — all as described above.
 
 ### Phase 4 — FB2, if wanted
 Book's Story parses FB2 with the same walker it uses for HTML, through Jsoup's XML mode. Ksoup has

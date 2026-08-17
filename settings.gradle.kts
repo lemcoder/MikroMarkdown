@@ -22,3 +22,5 @@ include(":cli")
 include(":benchmark")
 
 include(":cli-native")
+
+include(":pdfium")

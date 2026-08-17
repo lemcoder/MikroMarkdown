@@ -1,0 +1,4 @@
+# Bound by cinterop for native targets and, later, by the Konan plugin's JNI generator for the JVM.
+headers = fpdfview.h fpdf_text.h
+headerFilter = fpdf*.h
+package = pdfium

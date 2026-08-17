@@ -3,7 +3,7 @@ package io.github.lemcoder.mikromarkdown.converters
 import io.github.lemcoder.mikromarkdown.DocumentConverter
 import io.github.lemcoder.mikromarkdown.StreamInfo
 import io.github.lemcoder.mikromarkdown.model.Document
-import io.github.lemcoder.mikromarkdown.utils.plainTextBlocks
+import io.github.lemcoder.mikromarkdown.model.plainTextBlocks
 import org.apache.pdfbox.Loader
 import org.apache.pdfbox.text.PDFTextStripper
 

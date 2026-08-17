@@ -2,6 +2,7 @@ package io.github.lemcoder.mikromarkdown.cli
 
 import io.github.lemcoder.mikromarkdown.MikroMarkdown
 import io.github.lemcoder.mikromarkdown.MikroMarkdownException
+import io.github.lemcoder.mikromarkdown.pdf.PdfiumConverter
 import kotlin.system.exitProcess
 
 /**
@@ -18,7 +19,8 @@ public fun main(args: Array<String>) {
         exitProcess(2)
     }
 
-    val mikroMarkdown = MikroMarkdown()
+    // PDF lives in its own module; the CLI opts in, the library does not depend on it.
+    val mikroMarkdown = MikroMarkdown().apply { register(PdfiumConverter()) }
 
     for (path in args) {
         try {

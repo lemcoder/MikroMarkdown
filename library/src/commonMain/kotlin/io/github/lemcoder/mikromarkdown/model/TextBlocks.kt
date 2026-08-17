@@ -1,16 +1,15 @@
-package io.github.lemcoder.mikromarkdown.utils
-
-import io.github.lemcoder.mikromarkdown.model.Block
-import io.github.lemcoder.mikromarkdown.model.Paragraph
-import io.github.lemcoder.mikromarkdown.model.Text
+package io.github.lemcoder.mikromarkdown.model
 
 /**
- * Turns extracted plain text (PDF pages, speaker notes, …) into paragraph blocks.
+ * Turns extracted plain text into paragraph blocks.
+ *
+ * Public because it is what any text-extracting converter needs, including ones outside this module: the `:pdfium`
+ * module builds its documents with it.
  *
  * Blank lines separate paragraphs; soft-wrapped lines inside a paragraph are rejoined, so the Markdown does not inherit
  * the source layout's line breaks.
  */
-internal fun plainTextBlocks(text: String, reflow: Boolean = true): List<Block> {
+public fun plainTextBlocks(text: String, reflow: Boolean = true): List<Block> {
     // Form feeds mark PDF page breaks; treat them as paragraph boundaries.
     val normalized = text.replace("\r\n", "\n").replace('\r', '\n').replace('\u000C', '\n')
     val vocabulary = if (reflow) wordsIn(normalized) else emptySet()
