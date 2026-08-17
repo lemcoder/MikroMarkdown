@@ -4,16 +4,19 @@ Status: proposal. Branch `common-converters`. Nothing implemented yet.
 
 ## Where things stand
 
-Five converters and one helper are still JVM-only, plus PDF on each platform:
+**The office formats are gone.** DOCX, XLSX and PPTX were deleted rather than ported: they are
+editing formats, and a reader meets PDF and EPUB. That took Apache POI with them — 66 MB of
+distribution down to 36 MB, 35 jars to 23 — and removed the phase most likely to change output
+silently. They can return as an opt-in module in the shape `:pdfium` is taking; the fixtures stay,
+and a test pins that they currently raise `UnsupportedFormatException`.
+
+What is left JVM-only is two converters, one helper, and PDF on each platform:
 
 | file | lines | depends on | plan |
 |---|---|---|---|
 | `HtmlToDocument.kt` | 334 | Jsoup | → commonMain (Ksoup) |
-| `PptxConverter.kt` | 237 | POI `XSLF*`, XMLBeans `CT*` | → commonMain (raw XML) |
-| `DocxConverter.kt` | 164 | POI `XWPF*` | → commonMain (raw XML) |
 | `EpubConverter.kt` | 132 | `java.util.zip`, `javax.xml`, Jsoup | → commonMain |
 | `HtmlConverter.kt` | 15 | Jsoup, via the helper | → commonMain |
-| `XlsxConverter.kt` | 64 | POI `XSSFWorkbook`, `DataFormatter` | **stays on POI for now** |
 | `PdfConverter.kt` ×2 | 32 | PDFBox / pdfbox-android | → a separate `:pdfium` module |
 
 Moving them is not a file move: `commonMain` cannot use POI, Jsoup, `java.util.zip` or `javax.xml`,
@@ -25,10 +28,11 @@ output stayed byte-identical, which is the bar for everything except PDF.
 **iOS.** The document formats are the reason a SwiftUI reader cannot exist today. This is the blocker,
 and it is worth doing even if nothing gets faster.
 
-**A smaller, faster JVM build** — but only partly, now. POI dominates the 66 MB distribution and most
-of the 183 ms a DOCX takes end to end against 2.7 ms of actual conversion. Keeping XLSX on POI means
-**POI stays on the JVM classpath**, so that payoff is deferred until XLSX moves too. The portability
-payoff lands in full: native gets everything but XLSX.
+**A smaller JVM build** — already banked by the deletion, and worth being exact about what it bought:
+36 MB instead of 66 MB, but **no faster**. POI was loaded lazily, so a CSV or EPUB conversion never
+paid for it; the startup numbers did not move. Size and dependency surface improved, speed did not.
+
+What remains to remove is Jsoup, and it goes when HTML moves to Ksoup.
 
 Against all of it: POI, Jsoup and PDFBox absorb an enormous amount of real-world malformation.
 Hand-written parsers will be less forgiving, and the fixture corpus is ten files. **Expanding it is
@@ -142,21 +146,15 @@ container format, and a good first exercise of the ZIP reader.
 Text first, then images and placement. Independent of the OOXML work, so it can run in parallel or
 first if iOS PDF matters more.
 
-### Phase 4 — DOCX
-`word/document.xml`: `w:p`, `w:r`, `w:t`, `w:rPr` for bold/italic/strike, `w:pStyle` for heading level,
-`w:numPr` for list level; images through `word/_rels/document.xml.rels` into `word/media/`. We use
-three POI types and a narrow slice of each, so the rewrite is bounded.
+### Phase 4 — FB2, if wanted
+Book's Story parses FB2 with the same walker it uses for HTML, through Jsoup's XML mode. Ksoup has
+that mode too, so once Phase 1 lands FB2 is a tag-mapping layer over `HtmlToDocument` — a format we
+do not support today for about half a day's work. Worth it for a reader; skip it otherwise.
 
-### Phase 5 — PPTX
-The largest: slides, shapes, group shapes, placeholders, pictures, tables, and charts across eight
-chart types currently read through XMLBeans. Chart XML is verbose but regular. Last because it is the
-most code for the least reach.
-
-### Not now — XLSX
-Stays on POI. `DataFormatter` implements Excel's number-format language in thousands of lines and we
-call it for every non-integer cell; reimplementing it is a project of its own and the phase most
-likely to change output silently. Revisit once the rest has landed and the corpus is wider — and note
-that until then the JVM build still carries POI.
+### Removed — DOCX, XLSX, PPTX
+Deleted, not deferred. If they return it is as an `:office` module mirroring `:pdfium`: its own
+Gradle module, its own dependency, registered by the caller rather than by the factory. The deleted
+implementations are in the history, and the fixtures are still in the repository.
 
 ## Assets, across every phase
 
@@ -206,18 +204,14 @@ Three things this needs that do not exist yet:
 | 3b PDF images, PNG encoder, placement | 2-3 days | medium — the PNG writer is small but the reading-order interleave is fiddly |
 | assets for epub, html, pptx | 1 day, spread across their phases | low |
 | asset policy, ids, intrinsic size | half a day | low, but blocks the readers |
-| 4 DOCX | 2-3 days | medium |
-| 5 PPTX | 3-5 days | medium, mostly volume |
+| 4 FB2, optional | half a day | low |
 
-Roughly two weeks without XLSX, images included.
+Roughly a week, images included, now that the office formats are out.
 
 ## Worth deciding before starting
 
 - **Which targets beyond macOS?** Adding `iosArm64` and `linuxX64` early keeps the code honest;
   adding them late risks finding a dependency — or a pdfium archive — that does not fit.
-- **Does the JVM keep POI-backed converters as an option?** A `mikromarkdown-poi` artifact would let
-  callers choose POI's tolerance of broken files over startup time, and would make each format's
-  switch reversible. It costs an artifact and a registration path.
 - **How are pdfium binaries shipped to JVM users** — bundled per platform in the artifact, or
   downloaded at build time by the consumer? The first is convenient and large; the second is small
   and one more thing to go wrong.

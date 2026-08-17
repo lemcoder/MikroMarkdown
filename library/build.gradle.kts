@@ -45,10 +45,7 @@ kotlin {
         // detection differ. Converters live here once instead of being copied per target.
         val jvmShared by creating {
             dependsOn(commonMain.get())
-            dependencies {
-                implementation(libs.jsoup)
-                implementation(libs.poi.ooxml)
-            }
+            dependencies { implementation(libs.jsoup) }
         }
 
         jvmMain {

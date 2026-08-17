@@ -2,6 +2,7 @@ package io.github.lemcoder.mikromarkdown
 
 import com.goncalossilva.resources.Resource
 import kotlin.test.Test
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -27,45 +28,18 @@ class FileIntegrationTest {
         }
     }
 
+    /**
+     * The office formats were removed rather than ported: they are editing formats, and a reader meets PDF and EPUB.
+     * The fixtures stay for whenever an office plugin arrives, and this test pins the behaviour callers see until then.
+     */
     @Test
-    fun testDocx() =
-        assertConversion(
-            filename = "test.docx",
-            mustInclude =
-                listOf(
-                    "314b0a30-5b04-470b-b9f7-eed2c2bec74a",
-                    "49e168b7-d2ae-407f-a055-2167576f39a1",
-                    "# Abstract",
-                    "# Introduction",
-                    "AutoGen: Enabling Next-Gen LLM Applications via Multi-Agent Conversation",
-                ),
-        )
-
-    @Test
-    fun testXlsx() =
-        assertConversion(
-            filename = "test.xlsx",
-            mustInclude =
-                listOf(
-                    "09060124-b5e7-4717-9d07-3c046eb",
-                    "6ff4173b-42a5-4784-9b19-f49caff4d93d",
-                    "affc7dad-52dc-4b98-9b5d-51e65d8a8ad0",
-                ),
-        )
-
-    @Test
-    fun testPptx() =
-        assertConversion(
-            filename = "test.pptx",
-            mustInclude =
-                listOf(
-                    "2cdda5c8-e50e-4db4-b5f0-9722a649f455",
-                    "04191ea8-5c73-4215-a1d3-1cfb43aaaf12",
-                    "44bf7d06-5e7a-4a40-a2e1-a2e42ef28c8a",
-                    "1b92870d-e3b5-4e65-8153-919f4ff45592",
-                    "AutoGen: Enabling Next-Gen LLM Applications via Multi-Agent Conversation",
-                ),
-        )
+    fun officeFormatsAreNotSupported() {
+        for (filename in listOf("test.docx", "test.xlsx", "test.pptx")) {
+            val bytes = Resource("test_files/$filename").readBytes()
+            val info = StreamInfo(extension = filename.substringAfterLast("."))
+            assertFailsWith<UnsupportedFormatException>(filename) { mid.convert(bytes, info) }
+        }
+    }
 
     @Test
     fun testBlogHtml() =

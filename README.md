@@ -6,11 +6,14 @@ Kotlin Multiplatform (JVM + Android) library that converts documents to Markdown
 
 ## Supported formats
 
+Office formats were removed deliberately: DOCX, XLSX and PPTX are editing formats, while a reader
+meets PDF and EPUB. Dropping them took Apache POI with them — the distribution went from 66 MB to
+36 MB. If they are wanted back, they return as an opt-in module the way PDF is heading, rather than
+as a dependency everyone carries.
+
+
 | Format | Extension |
 |--------|-----------|
-| Word | `.docx` |
-| Excel | `.xlsx` |
-| PowerPoint | `.pptx` |
 | EPUB | `.epub` |
 | HTML | `.html`, `.htm` |
 | PDF | `.pdf` |
@@ -39,7 +42,7 @@ once rather than per target; only PDF extraction and MIME detection are platform
 `ConversionResult.document` exposes it alongside the rendered Markdown.
 
 ```kotlin
-val document = mid.parse("/path/to/report.docx")
+val document = mid.parse("/path/to/book.epub")
 document.blocks.filterIsInstance<Table>().forEach { println(it.rows.size) }
 
 // Render with different options
@@ -66,7 +69,7 @@ import io.github.lemcoder.mikromarkdown.MikroMarkdown
 val mid = MikroMarkdown()
 
 // from file path
-val result = mid.convert("/path/to/document.docx")
+val result = mid.convert("/path/to/book.epub")
 
 // from bytes with explicit format hint
 val bytes = File("document.html").readBytes()
@@ -173,10 +176,7 @@ In-process, best of 50 runs after warmup:
 | test.json | 0.4 KB | 0.03 ms | 0.01 ms | 0.04 ms |
 | test.epub | 2 KB | 0.42 ms | 0.00 ms | 0.42 ms |
 | test_blog.html | 25 KB | 0.85 ms | 0.11 ms | 0.96 ms |
-| test.xlsx | 11 KB | 1.09 ms | 0.00 ms | 1.03 ms |
-| test.docx | 132 KB | 3.28 ms | 0.00 ms | 2.81 ms |
 | test.pdf | 90 KB | 3.69 ms | 0.00 ms | 3.47 ms |
-| test.pptx | 271 KB | 4.79 ms | 0.00 ms | 4.53 ms |
 | test_wikipedia.html | 385 KB | 12.98 ms | 1.82 ms | 14.80 ms |
 
 End to end the CLI runs in 50–230 ms, against 3–5 ms for the Rust

@@ -10,11 +10,11 @@ class DumpOutputTest {
     fun dumpAll() {
         for (name in
             listOf(
-                "test.docx",
-                "test.xlsx",
-                "test.pptx",
                 "test.epub",
+                "test.pdf",
+                "test.csv",
                 "test.json",
+                "test.xml",
                 "test_blog.html",
                 "test_wikipedia.html",
             )) {

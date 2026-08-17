@@ -9,12 +9,6 @@ import org.junit.jupiter.api.Test
 
 class PythonComparisonTest {
 
-    @Test fun testDocx() = compare("test.docx")
-
-    @Test fun testXlsx() = compare("test.xlsx")
-
-    @Test fun testPptx() = compare("test.pptx")
-
     @Test fun testEpub() = compare("test.epub")
 
     @Test fun testJson() = compare("test.json")

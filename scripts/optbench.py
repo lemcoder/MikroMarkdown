@@ -30,7 +30,7 @@ PERF = REPO / "build/perf"
 TIMED = [("580 KB", PERF / "medium.csv"), ("1.8 MB", PERF / "big.csv")]
 TIMED_JVM = [
     ("wiki", FIXTURES / "test_wikipedia.html"),
-    ("docx", FIXTURES / "test.docx"),
+    ("epub", FIXTURES / "test.epub"),
     ("pdf", FIXTURES / "test.pdf"),
     ("json", PERF / "big.json"),
 ]

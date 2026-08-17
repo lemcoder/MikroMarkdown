@@ -80,7 +80,7 @@ val cdsArchive by tasks.registering {
     // One sample per family, so the archive covers the classes each conversion path touches rather
     // than only the ones a DOCX happens to need.
     val samples =
-        listOf("test.docx", "test.pdf", "test_blog.html", "test.csv", "test.json", "test.xlsx").map {
+        listOf("test.pdf", "test.epub", "test_blog.html", "test.csv", "test.json", "test.xml").map {
             fixtures.file(it).asFile.absolutePath
         }
     val javaHome = javaToolchains.launcherFor(java.toolchain).get().metadata.installationPath
