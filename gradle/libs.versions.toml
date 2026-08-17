@@ -14,10 +14,8 @@ kotlinx-resources = "0.15.0"
 commons-csv = "1.14.1"
 jackson = "2.21.3"
 junit = "6.1.0"
-pdfbox = "3.0.7"
 pdfbox-android = "2.0.27.0"
 tika = "3.3.0"
-clikt = "5.1.0"
 coreKtx = "1.7.0"
 detekt = "1.23.8"
 ktfmt = "0.27.0"
@@ -34,10 +32,8 @@ kotlinx-resources = { module = "com.goncalossilva:resources", version.ref = "kot
 commons-csv = { module = "org.apache.commons:commons-csv", version.ref = "commons-csv" }
 jackson-kotlin = { module = "com.fasterxml.jackson.module:jackson-module-kotlin", version.ref = "jackson" }
 junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit" }
-pdfbox = { module = "org.apache.pdfbox:pdfbox", version.ref = "pdfbox" }
 pdfbox-android = { module = "com.tom-roush:pdfbox-android", version.ref = "pdfbox-android" }
 tika-core = { module = "org.apache.tika:tika-core", version.ref = "tika" }
-clikt = { module = "com.github.ajalt.clikt:clikt", version.ref = "clikt" }
 core-ktx = { group = "androidx.test", name = "core-ktx", version.ref = "coreKtx" }
 konsist = { module = "com.lemonappdev:konsist", version.ref = "konsist" }
 

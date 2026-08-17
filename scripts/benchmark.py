@@ -2,11 +2,10 @@
 """Compare MikroMarkdown's Markdown against markitdown (Python) and anydoc (Rust).
 
 Usage:
-    ./gradlew :cli:installDist
+    ./gradlew :cli-native:linkReleaseExecutableMacosArm64
     python3 scripts/benchmark.py [--fixtures DIR] [--out DIR]
 
 Engines are skipped (not failed) when their CLI is unavailable:
-    mikromarkdown  cli/build/install/cli/bin/cli
     native         cli-native/build/bin/macosArm64/releaseExecutable/cli-native.kexe
     markitdown     `markitdown` on PATH, else `uvx markitdown[all]`
     anydoc-rust    third-party/anydoc/target/release/examples/convert (cargo build
@@ -77,12 +76,6 @@ class Engine:
 def which_engines() -> list[Engine]:
     engines: list[Engine] = []
 
-    cli = REPO / "cli/build/install/cli/bin/cli"
-    engines.append(
-        Engine("mikromarkdown", [str(cli)] if cli.exists() else None,
-               "" if cli.exists() else "run ./gradlew :cli:installDist")
-    )
-
     if shutil.which("markitdown"):
         markitdown = ["markitdown"]
     elif shutil.which("uvx"):
@@ -97,8 +90,8 @@ def which_engines() -> list[Engine]:
             "native",
             [str(native)] if native.exists() else None,
             "" if native.exists() else "run ./gradlew :cli-native:linkReleaseExecutableMacosArm64",
-            # The Kotlin/Native target carries only the converters that need no JVM library.
-            unsupported={"docx", "xlsx", "pptx", "epub", "pdf", "html", "htm"},
+            # Office formats were removed from the project entirely.
+            unsupported={"docx", "xlsx", "pptx"},
         )
     )
 

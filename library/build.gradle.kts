@@ -45,12 +45,7 @@ kotlin {
             implementation(libs.korlibs.compression)
         }
 
-        jvmMain {
-            dependencies {
-                implementation(libs.tika.core)
-                implementation(libs.pdfbox)
-            }
-        }
+        jvmMain { dependencies { implementation(libs.tika.core) } }
 
         androidMain { dependencies { implementation(libs.pdfbox.android) } }
 
