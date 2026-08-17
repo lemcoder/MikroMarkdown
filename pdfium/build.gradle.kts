@@ -1,6 +1,10 @@
+import io.github.lemcoder.interop.jvmInterops
 import java.security.MessageDigest
 
-plugins { alias(libs.plugins.kotlinMultiplatform) }
+plugins {
+    alias(libs.plugins.kotlinMultiplatform)
+    alias(libs.plugins.konanplugin)
+}
 
 /**
  * PDF support, kept in its own module so it can be dropped or extracted whole.
@@ -83,7 +87,44 @@ kotlin {
         }
     }
 
-    sourceSets { macosArm64Main.dependencies { implementation(project(":library")) } }
+    jvm {
+        // The JNI leg binds the same .def the native target does, so one declaration covers both.
+        compilations["main"].jvmInterops {
+            create("pdfium") {
+                defFile(project.file("src/nativeInterop/cinterop/pdfium.def"))
+                includeDirs.from(pdfiumRoot.get().dir("mac-arm64/include"))
+
+                externalNativeBuild {
+                    cmake {
+                        path.set(project.file("native/CMakeLists.txt"))
+                        targets.add("pdfium-jni")
+                        arguments.add("-DPDFium_DIR=${pdfiumRoot.get().dir("mac-arm64").asFile.absolutePath}")
+                    }
+                }
+            }
+        }
+    }
+
+    sourceSets {
+        macosArm64Main.dependencies { implementation(project(":library")) }
+        jvmMain.dependencies { implementation(project(":library")) }
+        jvmTest.dependencies { implementation(libs.kotlin.test) }
+    }
 }
 
+// The bindings load the stub by name, and the stub finds pdfium through the rpath CMake gave it.
+tasks.named<Test>("jvmTest") {
+    dependsOn("linkJvmInteropPdfium")
+    useJUnitPlatform()
+    systemProperty(
+        "java.library.path",
+        layout.buildDirectory.dir("jvmInterop/pdfium/lib").get().asFile.absolutePath,
+    )
+}
+
+// Every binding path needs the headers and the library unpacked first.
 tasks.matching { it.name.startsWith("cinteropPdfium") }.configureEach { dependsOn(downloadPdfium) }
+
+tasks
+    .matching { it.name.startsWith("generateJvmInterop") || it.name.startsWith("cmakeConfigure") }
+    .configureEach { dependsOn(downloadPdfium) }

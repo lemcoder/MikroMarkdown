@@ -8,6 +8,7 @@ kotlinx-io = "0.9.0"
 kotlinx-serialization = "1.9.0"
 ksoup = "0.2.6"
 korlibs = "6.0.0"
+konanplugin = "1.2.0-alpha06"
 kotlinx-resources = "0.15.0"
 
 commons-csv = "1.14.1"
@@ -48,4 +49,5 @@ kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", versi
 vanniktech-mavenPublish = { id = "com.vanniktech.maven.publish", version.ref = "vanniktechMavenPublish" }
 kotlinx-resources = { id = "com.goncalossilva.resources", version.ref = "kotlinx-resources" }
 detekt = { id = "io.gitlab.arturbosch.detekt", version.ref = "detekt" }
+konanplugin = { id = "io.github.lemcoder.konanplugin", version.ref = "konanplugin" }
 ktfmt = { id = "com.ncorti.ktfmt.gradle", version.ref = "ktfmt" }
