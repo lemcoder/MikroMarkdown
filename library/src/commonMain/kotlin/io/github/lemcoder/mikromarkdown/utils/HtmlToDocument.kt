@@ -1,5 +1,9 @@
 package io.github.lemcoder.mikromarkdown.utils
 
+import com.fleeksoft.ksoup.Ksoup
+import com.fleeksoft.ksoup.nodes.Element
+import com.fleeksoft.ksoup.nodes.Node
+import com.fleeksoft.ksoup.nodes.TextNode
 import io.github.lemcoder.mikromarkdown.model.Block
 import io.github.lemcoder.mikromarkdown.model.BlockQuote
 import io.github.lemcoder.mikromarkdown.model.CodeBlock
@@ -21,10 +25,6 @@ import io.github.lemcoder.mikromarkdown.model.TableCell
 import io.github.lemcoder.mikromarkdown.model.Text
 import io.github.lemcoder.mikromarkdown.model.ThematicBreak
 import io.github.lemcoder.mikromarkdown.model.plainText
-import org.jsoup.Jsoup
-import org.jsoup.nodes.Element
-import org.jsoup.nodes.Node
-import org.jsoup.nodes.TextNode
 
 /**
  * Walks an HTML DOM into the shared document model.
@@ -79,7 +79,7 @@ internal object HtmlToDocument {
         )
 
     internal fun parse(html: String, baseUri: String = ""): Document {
-        val doc = Jsoup.parse(html, baseUri)
+        val doc = Ksoup.parse(html = html, baseUri = baseUri)
         doc.select(DROPPED_SELECTOR).remove()
         val title = doc.title().ifBlank { null }
         val root = doc.body() ?: doc
@@ -310,7 +310,7 @@ internal object HtmlToDocument {
 
     /** HTML collapses runs of whitespace; do the same before the text reaches the model. */
     // Non-breaking spaces are not collapsible whitespace in HTML, so they survive verbatim.
-    private fun TextNode.normalizedText(): String = wholeText.replace(COLLAPSIBLE_WHITESPACE, " ")
+    private fun TextNode.normalizedText(): String = getWholeText().replace(COLLAPSIBLE_WHITESPACE, " ")
 
     private fun List<Inline>.startsWithSpace(): Boolean = (firstOrNull() as? Text)?.value?.startsWith(" ") == true
 

@@ -11,5 +11,5 @@ public class HtmlConverter : DocumentConverter {
     }
 
     override fun parse(bytes: ByteArray, info: StreamInfo): Document =
-        HtmlToDocument.parse(bytes.toString(Charsets.UTF_8), info.localPath.orEmpty())
+        HtmlToDocument.parse(bytes.decodeToString(), info.localPath.orEmpty())
 }

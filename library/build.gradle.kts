@@ -46,12 +46,9 @@ kotlin {
             implementation(libs.korlibs.compression)
         }
 
-        // JVM and Android run the same parsers on the same libraries; only PDF and MIME
-        // detection differ. Converters live here once instead of being copied per target.
-        val jvmShared by creating {
-            dependsOn(commonMain.get())
-            dependencies { implementation(libs.jsoup) }
-        }
+        // What is left for JVM and Android to share: EPUB, until its zip and XML move to
+        // commonMain. Everything else already lives there.
+        val jvmShared by creating { dependsOn(commonMain.get()) }
 
         jvmMain {
             dependsOn(jvmShared)
