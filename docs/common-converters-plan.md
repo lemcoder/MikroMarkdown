@@ -42,12 +42,14 @@ part of the work, not an afterthought.**
 
 | need | choice | notes |
 |---|---|---|
-| ZIP + inflate | `com.soywiz:korlibs-compression:6.0.0` | OOXML and EPUB are ZIP; no inflate in kotlinx-io or okio on native |
-| XML parsing | `io.github.pdvrieze.xmlutil:core:0.91.1` | KMP pull parser; hand-rolling one is where entities and namespaces go wrong |
+| inflate | `com.soywiz:korlibs-compression:6.0.0` | EPUB is a ZIP; nothing in kotlinx-io or okio inflates on native. It ships **no ZIP reader**, so the central directory is ours to parse — about 150 lines |
 | HTML parsing | `com.fleeksoft.ksoup:ksoup:0.2.6` | KMP port of Jsoup, near-identical API, `macosarm64` published |
 | PDF | pdfium via cinterop + JNI | see below |
 
-Confirm each links for `macosArm64` in a throwaway module before committing to the sequence.
+Verified on `macosArm64`, running rather than merely linking: Ksoup parses HTML and, in XML mode,
+reads an OPF well enough to pull `dc:title`, manifest hrefs, spine idrefs and the cover meta —
+**so no separate XML library is needed**. korlibs deflate round-trips (1000 bytes → 31 → 1000).
+The korlibs API lives under `korlibs.io.compression.*`, not `korlibs.compression.*`.
 
 ## PDF: a `:pdfium` module
 
@@ -128,9 +130,10 @@ That keeps `:pdfium` genuinely extractable — delete the module and the rest st
 
 Each phase is shippable on its own, risky ones last.
 
-### Phase 0 — infrastructure
-Add the three commonMain dependencies, confirm the native target still links, and extend
-`scripts/optbench.py` so it verifies native output for every fixture a phase unlocks.
+### Phase 0 — infrastructure ✅
+Ksoup and korlibs-compression are in `commonMain` and proven to run on the native binary. xmlutil
+turned out to be unnecessary — Ksoup's XML mode covers EPUB's container and OPF. Still to do when a
+phase needs it: extend `scripts/optbench.py` to verify native output for the fixtures it unlocks.
 
 ### Phase 1 — HTML, via Ksoup
 `HtmlToDocument` is written against a Jsoup-shaped API, so the port is mechanical. The risk is the

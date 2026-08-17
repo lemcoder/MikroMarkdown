@@ -39,7 +39,12 @@ kotlin {
     }
 
     sourceSets {
-        commonMain.dependencies { implementation(libs.kotlinx.io.core) }
+        commonMain.dependencies {
+            implementation(libs.kotlinx.io.core)
+            // Phase 0 of the commonMain migration: HTML parsing and the inflate that ZIP needs.
+            implementation(libs.ksoup)
+            implementation(libs.korlibs.compression)
+        }
 
         // JVM and Android run the same parsers on the same libraries; only PDF and MIME
         // detection differ. Converters live here once instead of being copied per target.
