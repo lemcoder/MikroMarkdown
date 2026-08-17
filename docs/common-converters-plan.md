@@ -10,11 +10,10 @@ distribution down to 36 MB, 35 jars to 23 — and removed the phase most likely 
 silently. They can return as an opt-in module in the shape `:pdfium` is taking; the fixtures stay,
 and a test pins that they currently raise `UnsupportedFormatException`.
 
-What is left JVM-only is two converters, one helper, and PDF on each platform:
+What is left JVM-only is PDF, and nothing else:
 
 | file | lines | depends on | plan |
 |---|---|---|---|
-| `EpubConverter.kt` | 132 | `java.util.zip`, `javax.xml`, Jsoup | → commonMain |
 | `PdfConverter.kt` ×2 | 32 | PDFBox / pdfbox-android | → a separate `:pdfium` module |
 
 Moving them is not a file move: `commonMain` cannot use POI, Jsoup, `java.util.zip` or `javax.xml`,
@@ -141,9 +140,10 @@ only — `wholeText` is a method rather than a property, and `Charsets` does not
 Jsoup is gone from the build. HTML on native converts a blog in 7 ms against the JVM's 80, and
 Wikipedia in 66 ms against 119.
 
-### Phase 2 — EPUB
-ZIP plus the XML parser for `container.xml` and the OPF, then Phase 1 for the chapters. Smallest
-container format, and a good first exercise of the ZIP reader.
+### Phase 2 — EPUB ✅
+Done, byte-identical, and the JVM-only source set is gone with it. `ZipArchive` in commonMain reads
+the central directory and inflates through korlibs; the container and package documents go through
+Ksoup's XML mode; chapters reuse Phase 1. EPUB now converts on native.
 
 ### Phase 3 — PDF, the `:pdfium` module
 Text first, then images and placement. Independent of the OOXML work, so it can run in parallel or

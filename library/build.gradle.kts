@@ -14,7 +14,6 @@ kotlin {
     // Public API must be spelled out: visibility and return types, no accidental exports.
     explicitApi()
 
-    // Declaring jvmShared by hand switches off the automatic hierarchy, which macosMain needs.
     applyDefaultHierarchyTemplate()
 
     jvm {
@@ -46,22 +45,14 @@ kotlin {
             implementation(libs.korlibs.compression)
         }
 
-        // What is left for JVM and Android to share: EPUB, until its zip and XML move to
-        // commonMain. Everything else already lives there.
-        val jvmShared by creating { dependsOn(commonMain.get()) }
-
         jvmMain {
-            dependsOn(jvmShared)
             dependencies {
                 implementation(libs.tika.core)
                 implementation(libs.pdfbox)
             }
         }
 
-        androidMain {
-            dependsOn(jvmShared)
-            dependencies { implementation(libs.pdfbox.android) }
-        }
+        androidMain { dependencies { implementation(libs.pdfbox.android) } }
 
         commonTest.dependencies {
             implementation(libs.kotlin.test)

@@ -56,7 +56,7 @@ def verify():
             continue
         if subprocess.run([str(JVM), str(fixture)], capture_output=True, cwd=REPO).stdout != baseline.read_bytes():
             problems.append(f"jvm {name}")
-    for name in ("test.csv", "test.json", "test.xml", "test_blog.html", "test_wikipedia.html"):
+    for name in ("test.csv", "test.json", "test.xml", "test_blog.html", "test_wikipedia.html", "test.epub"):
         fixture = FIXTURES / name
         jvm = subprocess.run([str(JVM), str(fixture)], capture_output=True, cwd=REPO).stdout
         native = subprocess.run([str(NATIVE), str(fixture)], capture_output=True, cwd=REPO).stdout
