@@ -68,9 +68,39 @@ publishes per-platform archives (`pdfium-mac-arm64.tgz`, `pdfium-linux-x64.tgz`,
 `pdfium-android-arm64.tgz`, …) containing headers and a library. A Gradle task downloads and unpacks
 a **pinned release with a checksum** into `build/pdfium/<target>/`; nothing binary is committed.
 
-The API needed is small: `FPDF_InitLibrary`, `FPDF_LoadMemDocument`, `FPDF_GetPageCount`,
-`FPDF_LoadPage`, `FPDFText_LoadPage`, `FPDFText_CountChars`, `FPDFText_GetText` (UTF-16),
-and the matching closes. The existing `plainTextBlocks` reflow and de-hyphenation sit on top unchanged.
+Text needs `FPDF_InitLibrary`, `FPDF_LoadMemDocument`, `FPDF_GetPageCount`, `FPDF_LoadPage`,
+`FPDFText_LoadPage`, `FPDFText_CountChars`, `FPDFText_GetText` (UTF-16), and the matching closes.
+The existing `plainTextBlocks` reflow and de-hyphenation sit on top unchanged.
+
+**Images matter as much as text here**, because the Compose and SwiftUI readers need them, so the
+module walks page objects rather than only the text layer:
+
+| step | call |
+|---|---|
+| iterate objects on a page | `FPDFPage_CountObjects`, `FPDFPage_GetObject` |
+| keep the images | `FPDFPageObj_GetType` == `FPDF_PAGEOBJ_IMAGE` |
+| where it sits on the page | `FPDFPageObj_GetBounds` |
+| size and colour depth | `FPDFImageObj_GetImageMetadata` |
+| how it is stored | `FPDFImageObj_GetImageFilterCount`, `FPDFImageObj_GetImageFilter` |
+| the bytes | `FPDFImageObj_GetImageDataDecoded`, or `FPDFImageObj_GetRenderedBitmap` |
+
+Two cases, and the second is the awkward one:
+
+- **`DCTDecode` or `JPXDecode`** — the decoded stream *is* a JPEG or JPEG 2000 file, so the bytes go
+  straight into an `Asset` with the matching media type. Free.
+- **Anything else** (Flate-compressed raw pixels, which is very common) — there is no image file in
+  the PDF, only pixels. `FPDFImageObj_GetRenderedBitmap` returns BGRA, and something has to encode
+  it. `commonMain` has no PNG encoder, so we write one: PNG is a header, an IDAT of deflated
+  scanlines and a CRC, and korlibs-compression is already there for the deflate. Perhaps 150 lines,
+  and worth having anyway — no other target has an encoder either.
+
+**Placement.** `FPDFPageObj_GetBounds` gives each image a rectangle and `FPDFText_GetCharBox` gives
+the text the same, so images can be emitted in reading order by vertical position rather than dumped
+at the end of the page. Without it a figure lands after the prose that discusses it. This is the same
+problem the PDFBox route had and never solved.
+
+**Scanned pages** — no text and one full-page image — are detectable (an image covering most of the
+mediabox, almost no characters) and worth flagging rather than emitting as a wall of nothing.
 
 **The module does not register itself.** `:library` keeps no PDF dependency, and a caller opts in:
 
@@ -109,7 +139,8 @@ ZIP plus the XML parser for `container.xml` and the OPF, then Phase 1 for the ch
 container format, and a good first exercise of the ZIP reader.
 
 ### Phase 3 — PDF, the `:pdfium` module
-Independent of the OOXML work, so it can run in parallel or first if iOS PDF matters more.
+Text first, then images and placement. Independent of the OOXML work, so it can run in parallel or
+first if iOS PDF matters more.
 
 ### Phase 4 — DOCX
 `word/document.xml`: `w:p`, `w:r`, `w:t`, `w:rPr` for bold/italic/strike, `w:pStyle` for heading level,
@@ -126,6 +157,31 @@ Stays on POI. `DataFormatter` implements Excel's number-format language in thous
 call it for every non-integer cell; reimplementing it is a project of its own and the phase most
 likely to change output silently. Revisit once the rest has landed and the corpus is wider — and note
 that until then the JVM build still carries POI.
+
+## Assets, across every phase
+
+The model already carries them — `Asset(id, mediaType, bytes, name)`, `Document.assets` and
+`Image.assetId` — but only DOCX populates them today. The readers need images from everything, so
+each phase extracts what its format holds:
+
+| format | where the images are | notes |
+|---|---|---|
+| docx | done | ids are the file name and can collide; needs fixing |
+| pdf | page objects, as above | needs a PNG encoder for raw-pixel images |
+| pptx | `XSLFPictureShape` today emits a fabricated `shapeName.jpg` and no bytes | real assets when the raw-XML rewrite lands |
+| epub | `<img src>` resolved against the chapter directory into a zip entry we already hold | needs an asset resolver in the HTML walker |
+| html | remote URLs stay URLs; `data:` URIs decode into assets | cheap |
+| xlsx | deferred with the rest of XLSX | |
+
+Three things this needs that do not exist yet:
+
+1. **An asset policy.** DOCX inlines base64 today, which is why its output is 161 KB against
+   markitdown's 4.6 KB. `MarkdownOptions` should carry `Inline` / `Reference` (write files, emit
+   relative links) / `AltTextOnly`; the current `imagesAsText` and `maxInlineImageUrl` are a crude
+   stand-in. A PDF full of figures makes this urgent rather than tidy.
+2. **Stable asset ids.** The DOCX id is the embedded file name and repeats across parts.
+3. **Intrinsic size on `Image`.** Width and height from the source, so a Compose or SwiftUI layout
+   does not jump while loading. `FPDFImageObj_GetImageMetadata` provides it for PDF.
 
 ## Ground rules per phase
 
@@ -146,11 +202,14 @@ that until then the JVM build still carries POI.
 | 0 infrastructure | half a day | low — or the plan changes, if a library will not build |
 | 1 HTML | 1 day | medium — parser differences on messy input |
 | 2 EPUB | half a day | low |
-| 3 PDF via pdfium | 2-3 days | medium — binding is routine, packaging and output changes are not |
+| 3 PDF via pdfium, text | 2 days | medium — binding is routine, packaging and output changes are not |
+| 3b PDF images, PNG encoder, placement | 2-3 days | medium — the PNG writer is small but the reading-order interleave is fiddly |
+| assets for epub, html, pptx | 1 day, spread across their phases | low |
+| asset policy, ids, intrinsic size | half a day | low, but blocks the readers |
 | 4 DOCX | 2-3 days | medium |
 | 5 PPTX | 3-5 days | medium, mostly volume |
 
-Roughly a week and a half without XLSX.
+Roughly two weeks without XLSX, images included.
 
 ## Worth deciding before starting
 
