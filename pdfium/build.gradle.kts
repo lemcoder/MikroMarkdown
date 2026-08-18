@@ -39,13 +39,6 @@ kotlin {
     jvm()
 
     sourceSets {
-        // JVM and Android call the same generated bridges, so both the bindings and the actual
-        // written over them live once, in a source set the two share.
-        val jniMain by creating { dependsOn(commonMain.get()) }
-
-        jvmMain { dependsOn(jniMain) }
-        androidMain { dependsOn(jniMain) }
-
         commonMain.dependencies { implementation(project(":library")) }
         jvmTest.dependencies { implementation(libs.kotlin.test) }
     }
@@ -62,10 +55,12 @@ tasks.named<Test>("jvmTest") {
 }
 
 /**
- * One declaration serves the JVM and every Android ABI: the same .def cinterop binds, generated into the source set
- * both share, and CMake linking a stub per platform against the pdfium built for it.
+ * The JVM and Android legs bind the same .def separately, one declaration each.
+ *
+ * They could share one, and deliberately do not: the two runtimes diverge over time — how a library is loaded, what a
+ * file path means — and a shared declaration turns the first difference into a restructure rather than an edit.
  */
-jvmInterops(kotlin.sourceSets.getByName("jniMain")) {
+kotlin.jvm().compilations["main"].jvmInterops {
     create("pdfium") {
         defFile(project.file("src/nativeInterop/cinterop/pdfium.def"))
         includeDirs.from(pdfiumRoot.dir("mac-arm64/include"))
@@ -75,11 +70,23 @@ jvmInterops(kotlin.sourceSets.getByName("jniMain")) {
                 path.set(project.file("native/CMakeLists.txt"))
                 targets.add("pdfium-jni")
                 arguments.add("-DPDFium_DIR=${pdfiumRoot.dir("mac-arm64").asFile.absolutePath}")
-                // The desktop JVM needs the host stub too, not only the Android ABIs.
-                hostBuild.set(true)
+            }
+        }
+    }
+}
 
-                for ((abi, platformName) in pdfiumAbis) {
-                    abi(abi) {
+kotlin.targets.getByName("android").compilations.getByName("main").jvmInterops {
+    create("pdfiumAndroid") {
+        defFile(project.file("src/nativeInterop/cinterop/pdfium.def"))
+        includeDirs.from(pdfiumRoot.dir("android-arm64/include"))
+
+        externalNativeBuild {
+            cmake {
+                path.set(project.file("native/CMakeLists.txt"))
+                targets.add("pdfium-jni")
+
+                for ((abiName, platformName) in pdfiumAbis) {
+                    abi(abiName) {
                         platform.set(libs.versions.android.minSdk.get().toInt())
                         arguments.add("-DPDFium_DIR=${pdfiumRoot.dir(platformName).asFile.absolutePath}")
                     }
