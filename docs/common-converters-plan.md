@@ -214,8 +214,9 @@ Three things this needs that do not exist yet:
 
 ## Ground rules per phase
 
-1. The new implementation lands in `commonMain`; the `jvmShared` version is deleted in the same
-   commit. The Konsist duplicate-file rule keeps anything from being copied per target.
+1. The new implementation lands in `commonMain` and the platform one is deleted in the same commit.
+   The Konsist duplicate-file rule catches anything copied per target by accident; where a split is
+   deliberate, as the PDF module's JVM and Android legs are, it is written down as such.
 2. `scripts/optbench.py` must report every fixture byte-identical on both targets before timings are
    read. Where a difference is deliberate — PDF, and possibly HTML — the baseline is updated in the
    same commit with the diff quoted in the message.
