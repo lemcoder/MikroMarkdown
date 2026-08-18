@@ -1,13 +1,10 @@
 package io.github.lemcoder.mikromarkdown
 
-import android.content.Context
-import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 import io.github.lemcoder.mikromarkdown.converters.CsvConverter
 import io.github.lemcoder.mikromarkdown.converters.EpubConverter
 import io.github.lemcoder.mikromarkdown.converters.HtmlConverter
 import io.github.lemcoder.mikromarkdown.converters.JsonConverter
 import io.github.lemcoder.mikromarkdown.converters.MarkdownPassthroughConverter
-import io.github.lemcoder.mikromarkdown.converters.PdfConverter
 import io.github.lemcoder.mikromarkdown.converters.PlainTextConverter
 import io.github.lemcoder.mikromarkdown.converters.XmlConverter
 import java.io.File
@@ -15,9 +12,10 @@ import java.io.File
 /**
  * A [MikroMarkdown] with every Android converter registered.
  *
- * PDF support needs a [Context]: pdfbox-android loads its resources from the app's assets.
+ * PDF is not among them: it needs a native library, so the `:pdfium` module provides it and the caller opts in with
+ * `register(PdfiumConverter())`.
  */
-public fun MikroMarkdown(context: Context? = null): MikroMarkdown =
+public fun MikroMarkdown(): MikroMarkdown =
     MikroMarkdown(SignatureMimeDetector).apply {
         register(MarkdownPassthroughConverter())
         register(HtmlConverter())
@@ -25,10 +23,6 @@ public fun MikroMarkdown(context: Context? = null): MikroMarkdown =
         register(JsonConverter())
         register(XmlConverter())
         register(EpubConverter())
-        if (context != null) {
-            PDFBoxResourceLoader.init(context)
-            register(PdfConverter())
-        }
         register(PlainTextConverter(), priority = 10.0)
     }
 

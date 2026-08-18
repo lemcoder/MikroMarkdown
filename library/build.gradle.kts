@@ -47,8 +47,6 @@ kotlin {
 
         jvmMain { dependencies { implementation(libs.tika.core) } }
 
-        androidMain { dependencies { implementation(libs.pdfbox.android) } }
-
         commonTest.dependencies {
             implementation(libs.kotlin.test)
             implementation(libs.kotlinx.resources)
