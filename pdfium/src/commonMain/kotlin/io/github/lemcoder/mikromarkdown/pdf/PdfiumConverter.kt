@@ -15,8 +15,9 @@ import io.github.lemcoder.mikromarkdown.model.plainTextBlocks
  * ```
  *
  * The extraction itself is per-platform — cinterop on native, generated JNI bridges on the JVM — but both reach the
- * same pdfium, and everything above [extractText] is shared. Turning that text into paragraphs, including the
- * de-hyphenation that pdfium's unmapped glyphs call for, is `plainTextBlocks`' job rather than a second copy here.
+ * same pdfium, and everything above [extractPages] is shared: each leg reports what pdfium saw, and one copy of the
+ * rules here turns it into a document. Deciding what a wrapped hyphen meant belongs to `plainTextBlocks`, which reads
+ * the whole document rather than one page.
  */
 public class PdfiumConverter : DocumentConverter {
 
@@ -25,8 +26,8 @@ public class PdfiumConverter : DocumentConverter {
     }
 
     override fun parse(bytes: ByteArray, info: StreamInfo): Document =
-        Document(blocks = plainTextBlocks(extractText(bytes)))
+        Document(blocks = plainTextBlocks(extractPages(bytes).restored()))
 }
 
-/** Every page's text, concatenated, one page per line. */
-internal expect fun extractText(bytes: ByteArray): String
+/** Every page, in order; [PageText] carries the text and the wraps pdfium collapsed. */
+internal expect fun extractPages(bytes: ByteArray): List<PageText>
