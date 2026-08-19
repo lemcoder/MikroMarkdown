@@ -102,3 +102,11 @@ tasks.matching { it.name.startsWith("cinteropPdfium") }.configureEach { dependsO
 tasks
     .matching { it.name.startsWith("generateJvmInterop") || it.name.startsWith("cmakeConfigure") }
     .configureEach { dependsOn("downloadPdfium") }
+
+// The JNI generator reads the Kotlin/Native distribution, and the Kotlin plugin fetches that only when
+// something compiles a native target. On a machine that has never built one — a CI runner, a fresh clone
+// running `:pdfium:jvmTest` on its own — generating the bindings fails with "No Kotlin/Native distribution
+// found" instead, so the download is ordered before it rather than left to whatever else ran first.
+tasks
+    .matching { it.name.startsWith("generateJvmInterop") }
+    .configureEach { dependsOn("downloadKotlinNativeDistribution") }
