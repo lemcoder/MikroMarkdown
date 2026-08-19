@@ -218,3 +218,11 @@ python3 scripts/benchmark.py
 
 Engines whose CLI is missing are skipped. anydoc only handles binary formats, so it sits out the
 HTML/JSON/XML fixtures.
+
+Both comparison engines are submodules pinned to the versions the figures were measured against —
+anydoc v0.1.8, markitdown v0.1.6 — so a clone needs them fetched before either script has anything
+to compare with:
+
+```bash
+git submodule update --init
+```
