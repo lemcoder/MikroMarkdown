@@ -6,19 +6,22 @@ Kotlin Multiplatform (JVM + Android) library that converts documents to Markdown
 
 ## Supported formats
 
-| Format | Extension |
-|--------|-----------|
-| Word | `.docx` |
-| Excel | `.xlsx` |
-| PowerPoint | `.pptx` |
-| EPUB | `.epub` |
-| HTML | `.html`, `.htm` |
-| PDF | `.pdf` |
-| CSV | `.csv` |
-| JSON | `.json` |
-| XML | `.xml` |
-| Plain text | `.txt` and others |
-| Markdown | `.md` (passthrough) |
+Office formats were removed deliberately: DOCX, XLSX and PPTX are editing formats, while a reader
+meets PDF and EPUB. Dropping them took Apache POI with them — the distribution went from 66 MB to
+36 MB. If they are wanted back, they return as an opt-in module the way PDF is heading, rather than
+as a dependency everyone carries.
+
+
+| Format | Extension | Notes |
+|--------|-----------|-------|
+| EPUB | `.epub` | |
+| HTML | `.html`, `.htm` | |
+| PDF | `.pdf` | opt-in: `:pdfium` module, `register(PdfiumConverter())` |
+| CSV | `.csv` | |
+| JSON | `.json` | |
+| XML | `.xml` | |
+| Plain text | `.txt` and others | |
+| Markdown | `.md` (passthrough) | |
 
 ## Architecture
 
@@ -34,12 +37,13 @@ bytes ──► MimeDetector ──► DocumentConverter.parse ──► Documen
 ```
 
 Converters contain no Markdown syntax, so escaping, table shaping, list indentation and spacing are
-fixed once for all formats. JVM and Android share one `jvmShared` source set, so a converter exists
-once rather than per target; only PDF extraction and MIME detection are platform-specific. The model is public: `mid.parse(path)` returns the `Document`, and
-`ConversionResult.document` exposes it alongside the rendered Markdown.
+fixed once for all formats. Every converter lives in `commonMain` and runs on every target; only PDF
+is platform-specific, and it lives in its own module because it needs a native library. The model is
+public: `mid.parse(path)` returns the `Document`, and `ConversionResult.document` exposes it
+alongside the rendered Markdown.
 
 ```kotlin
-val document = mid.parse("/path/to/report.docx")
+val document = mid.parse("/path/to/book.epub")
 document.blocks.filterIsInstance<Table>().forEach { println(it.rows.size) }
 
 // Render with different options
@@ -66,7 +70,7 @@ import io.github.lemcoder.mikromarkdown.MikroMarkdown
 val mid = MikroMarkdown()
 
 // from file path
-val result = mid.convert("/path/to/document.docx")
+val result = mid.convert("/path/to/book.epub")
 
 // from bytes with explicit format hint
 val bytes = File("document.html").readBytes()
@@ -151,170 +155,52 @@ import the renderer or each other; Markdown syntax appears only under `render/`.
 every `DocumentConverter` is named `*Converter` and lives in `converters`.
 
 *Hygiene* — no wildcard imports, no printing from library code, and no source file duplicated
-between source sets (the drift that the `jvmShared` set removed).
+between source sets.
 
 ktfmt-gradle only derives tasks for the common and JVM source sets, so `library/build.gradle.kts`
 registers matching tasks for the Android ones.
 
 ## Performance
 
-Conversion itself is a few milliseconds; a CLI run is mostly JVM startup and class loading.
-`:benchmark` measures the pipeline in-process, `scripts/benchmark.py` measures whole processes.
-
-```bash
-./gradlew :benchmark:run          # in-process, per stage
-python3 scripts/benchmark.py      # whole process, against markitdown and anydoc
-```
-
-In-process, best of 50 runs after warmup:
-
-| fixture | size | parse | render | total |
-|---|---|---|---|---|
-| test.json | 0.4 KB | 0.03 ms | 0.01 ms | 0.04 ms |
-| test.epub | 2 KB | 0.42 ms | 0.00 ms | 0.42 ms |
-| test_blog.html | 25 KB | 0.85 ms | 0.11 ms | 0.96 ms |
-| test.xlsx | 11 KB | 1.09 ms | 0.00 ms | 1.03 ms |
-| test.docx | 132 KB | 3.28 ms | 0.00 ms | 2.81 ms |
-| test.pdf | 90 KB | 3.69 ms | 0.00 ms | 3.47 ms |
-| test.pptx | 271 KB | 4.79 ms | 0.00 ms | 4.53 ms |
-| test_wikipedia.html | 385 KB | 12.98 ms | 1.82 ms | 14.80 ms |
-
-End to end the CLI runs in 50–230 ms, against 3–5 ms for the Rust
-[anydoc](https://github.com/firecrawl/anydoc) and 410–540 ms for Python markitdown. Nearly all of
-what is left is process startup: `java -version` alone costs 41 ms on the same machine, and the
-conversion is under 5 ms for every fixture but Wikipedia. Matching a native binary would take
-ahead-of-time compilation, not a faster pipeline.
-
-Note when reproducing this: anydoc's npm package is a Node script loading a napi module, so timing
-`node_modules/.bin/anydoc` charges Node's 15 ms startup to Rust and reads as ~22 ms flat. The
-figures here come from its Rust binary, built from the vendored source with
-`cargo build --release --example convert`.
-
-The CLI therefore optimizes startup rather than throughput:
-
-- `installDist` records a [class-data-sharing](https://docs.oracle.com/en/java/javase/21/vm/class-data-sharing.html)
-  archive into the distribution, which roughly halves startup. Set `MIKROMARKDOWN_NO_CDS=1` to skip
-  it; the start script also skips it when the archive is missing, so `distZip` still works.
-- it compiles with C1 only (`-XX:TieredStopAtLevel=1`), since C2 never pays for itself in a run this
-  short. Embedders using the library get the normal JIT.
-
-### Kotlin/Native spike
-
-`:cli-native` builds a macOS binary carrying the converters that need no JVM library — CSV, JSON,
-XML, plain text and Markdown passthrough. It shares the model, renderer and pipeline with every
-other target, and its output is byte-identical to the JVM CLI's.
+The command line tool is the Kotlin/Native binary; there is no JVM CLI. `:benchmark` measures the
+library in-process on the JVM, and `scripts/optbench.py` A/B times the native binary against a saved
+champion so that session-to-session drift cannot be mistaken for a change.
 
 ```bash
 ./gradlew :cli-native:linkReleaseExecutableMacosArm64
+./gradlew :benchmark:run            # library, in-process, per stage
+python3 scripts/optbench.py "..."   # native binary, against the champion
+python3 scripts/benchmark.py        # whole process, against markitdown and anydoc
 ```
 
-Whole-process, best of eight, converting CSV of increasing size:
+Whole process, best of ten, against the Rust [anydoc](https://github.com/firecrawl/anydoc):
 
-| input | Kotlin/Native | anydoc (Rust binary) | JVM CLI |
-|---|---|---|---|
-| 1 KB | 3 ms | 3 ms | 51 ms |
-| 55 KB | **4 ms** | 5 ms | 61 ms |
-| 172 KB | **7 ms** | 10 ms | 59 ms |
-| 580 KB | **19 ms** | 25 ms | 70 ms |
-| 1.8 MB | **51 ms** | 71 ms | 101 ms |
-| 3.5 MB | **102 ms** | 139 ms | 142 ms |
-
-Kotlin/Native is ahead of the Rust binary at every size here, having started the spike 18-21%
-behind on large inputs; `docs/optimization-log.md` records how. Note that anydoc's npm package runs
-through Node, which adds about 18 ms — these figures are its Rust binary, built from the vendored
-source with `cargo build --release --example convert`.
-
-On the document formats the native target does not carry, the JVM CLI converts a DOCX in 180 ms and
-Wikipedia in 122 ms, against anydoc's 3 ms and Python markitdown's 409 ms and 520 ms. That gap is
-process startup, not conversion: in-process those documents take 2.7 ms and 13 ms.
-
-Three changes closed the throughput gap that the first cut of this target showed:
-
-- **The renderer stopped allocating when it has nothing to change.** Escaping now scans for the
-  first character that needs a backslash and returns the input untouched when there is none, and a
-  single-line table cell skips the split-and-rejoin. Ordinary cells — a word, a number — now cost no
-  allocation at all. This is shared code, so the JVM got faster too.
-- **The native CSV reader slices instead of accumulating.** Fields are ranges in the decoded text,
-  so a field costs one substring rather than a per-character builder plus a separate trim. Only
-  fields containing escaped quotes, which cannot be a slice of the input, assemble a string.
-- **CSV, JSON and XML moved to `commonMain`**, taking commons-csv, Jackson and
-  kotlinx-serialization with them. One implementation now serves every target: a slicing CSV reader,
-  a JSON re-indenter that copies tokens verbatim so `1.50` does not become `1.5`, and an XML
-  formatter. A JSON conversion loads 1214 classes instead of 2063, the native binary is 1.3 MB
-  instead of 2.2 MB, and the JVM CLI converts JSON in 56 ms instead of 95 ms. Output is unchanged
-  on every fixture.
-- **Two quadratics in the renderer are gone.** Blocks are written into one buffer carrying a line
-  prefix, rather than each block returning a string that its parent splits into lines and re-joins —
-  which charged the deepest content once per level of nesting above it. And the entity check now
-  scans ten characters ahead instead of searching the rest of the document for a semicolon.
-  Measured on inputs built to provoke them, with output byte-identical before and after:
-
-  | pathological input | before | after |
-  |---|---|---|
-  | 400-deep nested lists | 33.03 ms | **0.12 ms** |
-  | 400 ampersands per cell, 789 KB | 9.39 ms | **2.42 ms** |
-
-Together those took a 1.8 MB CSV from 237 ms to 87 ms. Kotlin/Native's remaining cost is the
-document model itself: every cell becomes a `TableCell` holding a `Text` holding a `String`, which
-is why peak memory is 125 MB for a 1.8 MB input. A genuinely zero-copy model — inlines holding
-slices of the source buffer rather than copies — is the next lever, and a deeper change.
-
-Compiler flags were measured rather than guessed. `-Xbinary=preCodegenInlineThreshold=40` is worth
-about 8% on large inputs and ships. Every garbage collection setting tried was worse than the
-default, and the collector is the interesting part of the story, so the numbers are below.
-
-Converting 20 documents of 580 KB in one process:
-
-| policy | time | peak RSS |
+| input | Kotlin/Native | anydoc (Rust) |
 |---|---|---|
-| default (adaptive) | 543 ms | 59 MB |
-| `gcSchedulerType=manual`, never collecting | 428 ms | 954 MB |
-| `gcSchedulerType=manual`, collecting between documents | 485 ms | 67 MB |
-| `autotune = false` with a heap ceiling | 1246 ms | 43 MB |
+| 1 KB CSV | 3 ms | 3 ms |
+| 172 KB CSV | 7 ms | 10 ms |
+| 1.8 MB CSV | 51 ms | 71 ms |
+| 3.5 MB CSV | 102 ms | 139 ms |
+| EPUB | 5 ms | 3 ms |
+| Wikipedia HTML | 65 ms | — |
 
-A manual collector is genuinely faster, since a process that exits never needs to collect, and a
-document boundary is the one place where everything the previous conversion allocated is provably
-dead. But it only bounds growth *between* documents: a single large input still has nothing
-collecting mid-parse, so the 3.5 MB file takes 228 MB either way and a much larger one would grow
-until it failed. Turning `autotune` off is far worse than it looks like it should be — 8.6x on a
-single 3.5 MB file — and the ceiling value makes no difference to that, so `targetHeapBytes` is not
-behaving as its name suggests.
+Note when reproducing this: anydoc's npm package is a Node script loading a napi module, so timing
+`node_modules/.bin/anydoc` charges Node's 15 ms startup to Rust and reads as ~22 ms flat. The figures
+here come from its Rust binary, built from the vendored source with
+`cargo build --release --example convert`.
 
-The default collector ships. The native CLI does accept several files per invocation, which is what
-would make a manual policy workable if the trade ever becomes worth it.
-
-### What did not help
-
-Binary size does not drive startup, so shrinking it is not a performance lever:
-
-| binary | size | startup |
-|---|---|---|
-| Kotlin/Native hello world | 485 KB | 3.2 ms |
-| this CLI | 1.3 MB | 3.5 ms |
-| anydoc (Rust) | 6 MB | 2.6 ms |
-
-A 6 MB Rust binary starts faster than a 485 KB Kotlin/Native one, and stripping ours changed
-nothing measurable. The 0.6 ms between the two runtimes is initialization, not size.
-
-Replacing clikt with hand-rolled argument parsing removes 147 loaded classes and about 2 ms — inside
-the noise, and not worth losing its help output and error handling. The dependency stays.
-
-Zero-copy parsing made things slower, which is the most useful negative result here. Handing the
-renderer a `CharSequence` window onto the source instead of a substring removes one allocation per
-cell, but every character access then goes through an interface call rather than `String`'s direct
-indexing — and the renderer reads every character anyway to decide whether it needs escaping. A
-1.8 MB CSV went from 86 ms to 118 ms on native and 126 ms to 154 ms on the JVM. Rust gets this for
-free because `&str` slices index directly; Kotlin does not. Reverted.
+`docs/optimization-log.md` records twenty-five measured experiments, nine of which survived, and the
+two methodology mistakes that cost more than most of the wins.
 
 ## Benchmark
 
-`scripts/benchmark.py` converts the test fixtures with MikroMarkdown, Python
+`scripts/benchmark.py` converts the test fixtures with the native binary, Python
 [markitdown](https://github.com/microsoft/markitdown) and Rust
 [anydoc](https://github.com/firecrawl/anydoc), then reports content recall, structure counts, table
 integrity and timings to `build/benchmark/report.md`:
 
 ```bash
-./gradlew :cli:installDist
+./gradlew :cli-native:linkReleaseExecutableMacosArm64
 python3 scripts/benchmark.py
 ```
 

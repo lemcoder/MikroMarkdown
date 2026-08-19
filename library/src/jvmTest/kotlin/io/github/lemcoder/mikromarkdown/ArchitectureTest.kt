@@ -70,9 +70,17 @@ class ArchitectureTest {
     fun `helpers under utils stay internal`() {
         val utils = { name: String? -> name?.contains(".utils") == true }
 
-        // internal or private: anything but part of the published API.
-        scope.classes().filter { utils(it.packagee?.name) }.assertFalse { it.hasPublicOrDefaultModifier }
-        scope.objects().filter { utils(it.packagee?.name) }.assertFalse { it.hasPublicOrDefaultModifier }
+        // internal or private: anything but part of the published API. Only top-level declarations
+        // are checked — a companion inside an internal class is already unreachable, and demanding a
+        // modifier on it would be noise.
+        scope
+            .classes()
+            .filter { utils(it.packagee?.name) && it.isTopLevel }
+            .assertFalse { it.hasPublicOrDefaultModifier }
+        scope
+            .objects()
+            .filter { utils(it.packagee?.name) && it.isTopLevel }
+            .assertFalse { it.hasPublicOrDefaultModifier }
         scope
             .functions()
             .filter { utils(it.packagee?.name) && it.isTopLevel }

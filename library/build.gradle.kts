@@ -14,7 +14,6 @@ kotlin {
     // Public API must be spelled out: visibility and return types, no accidental exports.
     explicitApi()
 
-    // Declaring jvmShared by hand switches off the automatic hierarchy, which macosMain needs.
     applyDefaultHierarchyTemplate()
 
     jvm {
@@ -39,30 +38,14 @@ kotlin {
     }
 
     sourceSets {
-        commonMain.dependencies { implementation(libs.kotlinx.io.core) }
-
-        // JVM and Android run the same parsers on the same libraries; only PDF and MIME
-        // detection differ. Converters live here once instead of being copied per target.
-        val jvmShared by creating {
-            dependsOn(commonMain.get())
-            dependencies {
-                implementation(libs.jsoup)
-                implementation(libs.poi.ooxml)
-            }
+        commonMain.dependencies {
+            implementation(libs.kotlinx.io.core)
+            // Phase 0 of the commonMain migration: HTML parsing and the inflate that ZIP needs.
+            implementation(libs.ksoup)
+            implementation(libs.korlibs.compression)
         }
 
-        jvmMain {
-            dependsOn(jvmShared)
-            dependencies {
-                implementation(libs.tika.core)
-                implementation(libs.pdfbox)
-            }
-        }
-
-        androidMain {
-            dependsOn(jvmShared)
-            dependencies { implementation(libs.pdfbox.android) }
-        }
+        jvmMain { dependencies { implementation(libs.tika.core) } }
 
         commonTest.dependencies {
             implementation(libs.kotlin.test)
