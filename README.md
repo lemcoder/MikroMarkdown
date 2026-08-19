@@ -2,7 +2,8 @@
 
 [![Test](https://github.com/lemcoder/MikroMarkdown/actions/workflows/gradle.yml/badge.svg)](https://github.com/lemcoder/MikroMarkdown/actions/workflows/gradle.yml)
 
-Kotlin Multiplatform (JVM + Android) library that converts documents to Markdown. Port of Microsoft's [MarkItDown](https://github.com/microsoft/markitdown).
+Kotlin Multiplatform library that converts documents to Markdown, on the JVM, Android and Kotlin/Native. Port of
+Microsoft's [MarkItDown](https://github.com/microsoft/markitdown).
 
 ## Supported formats
 
@@ -37,8 +38,10 @@ bytes ──► MimeDetector ──► DocumentConverter.parse ──► Documen
 ```
 
 Converters contain no Markdown syntax, so escaping, table shaping, list indentation and spacing are
-fixed once for all formats. Every converter lives in `commonMain` and runs on every target; only PDF
-is platform-specific, and it lives in its own module because it needs a native library. The model is
+fixed once for all formats. Every converter lives in `commonMain` and runs on every target, so the
+library has one registration list rather than one per platform and no third-party JVM dependency at
+all; only PDF is platform-specific, and it lives in its own module because it needs a native
+library. The model is
 public: `mid.parse(path)` returns the `Document`, and `ConversionResult.document` exposes it
 alongside the rendered Markdown.
 
@@ -82,13 +85,23 @@ println(result.title) // nullable, extracted from document metadata
 
 ### Android
 
+Identical — `MikroMarkdown()` is one common function, and every converter it registers is common
+code.
+
 ```kotlin
 import io.github.lemcoder.mikromarkdown.MikroMarkdown
 
-// pass Context to enable PDF support
-val mid = MikroMarkdown(context)
+val mid = MikroMarkdown()
 
 val result = mid.convert(file.absolutePath)
+```
+
+### PDF
+
+PDF needs pdfium, so it ships as `:pdfium` and the caller opts in:
+
+```kotlin
+val mid = MikroMarkdown().apply { register(PdfiumConverter()) }
 ```
 
 ## Custom converters
@@ -100,10 +113,8 @@ class MyConverter : DocumentConverter {
     override fun accepts(bytes: ByteArray, info: StreamInfo): Boolean =
         info.extension == "xyz"
 
-    override fun parse(bytes: ByteArray, info: StreamInfo): Document = document {
-        heading(1, "Custom")
-        paragraph(bytes.decodeToString())
-    }
+    override fun parse(bytes: ByteArray, info: StreamInfo): Document =
+        Document(blocks = listOf(Heading(1, "Custom"), Paragraph(bytes.decodeToString())))
 }
 
 val mid = MikroMarkdown()
@@ -115,7 +126,10 @@ Lower priority runs first. `PlainTextConverter` uses `10.0` so it acts as a fall
 
 ## Custom MIME detection
 
-`MimeDetector` is a `fun interface` — pass a lambda or implement it:
+`MimeDetector` is a `fun interface` — pass a lambda or implement it. The default,
+`SignatureMimeDetector`, reads the leading bytes and falls back to the extension; content sniffing
+for extension-less text formats is where a full MIME registry such as Apache Tika goes, as your
+dependency rather than the library's:
 
 ```kotlin
 val mid = MikroMarkdown(MimeDetector { path ->
@@ -155,7 +169,7 @@ import the renderer or each other; Markdown syntax appears only under `render/`.
 every `DocumentConverter` is named `*Converter` and lives in `converters`.
 
 *Hygiene* — no wildcard imports, no printing from library code, and no source file duplicated
-between source sets.
+between source sets — a rule that now has no exceptions, since every production file is common.
 
 ktfmt-gradle only derives tasks for the common and JVM source sets, so `library/build.gradle.kts`
 registers matching tasks for the Android ones.

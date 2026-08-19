@@ -21,10 +21,7 @@ kotlin {
         testRuns["test"].executionTask.configure { useJUnitPlatform() }
     }
 
-    // Spike: a native target to see how close a real binary gets to the Rust implementation.
-    // The shared integration tests expect JVM-only formats, so native test compilation stays off
-    // until the native target carries real converters.
-    macosArm64 { compilations.getByName("test") { compileTaskProvider.configure { enabled = false } } }
+    macosArm64()
 
     androidLibrary {
         namespace = "io.github.lemcoder.mikromarkdown"
@@ -40,12 +37,10 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             implementation(libs.kotlinx.io.core)
-            // Phase 0 of the commonMain migration: HTML parsing and the inflate that ZIP needs.
+            // HTML parsing, and the inflate that EPUB's ZIP container needs.
             implementation(libs.ksoup)
             implementation(libs.korlibs.compression)
         }
-
-        jvmMain { dependencies { implementation(libs.tika.core) } }
 
         commonTest.dependencies {
             implementation(libs.kotlin.test)
@@ -60,8 +55,8 @@ kotlin {
     }
 }
 
-// ktfmt-gradle only derives tasks for the common and JVM source sets, so the Android
-// ones — where half the converters live — would go unformatted and unchecked.
+// ktfmt-gradle only derives tasks for the common and JVM source sets, so the Android test
+// source sets would go unformatted and unchecked.
 run {
     val androidSources = fileTree("src") { include("android*/**/*.kt") }
     val template = tasks.named<com.ncorti.ktfmt.gradle.tasks.KtfmtFormatTask>("ktfmtFormatKmpCommonMain")

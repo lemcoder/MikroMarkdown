@@ -31,10 +31,16 @@ public sealed interface Block
 public data class Heading(
     val level: Int,
     val content: List<Inline>,
+    /** The source's own id for this heading, where it had one; HTML fills it from `id`. */
     val anchor: String? = null,
-) : Block
+) : Block {
+    /** The common case: a heading whose content is one run of text. */
+    public constructor(level: Int, text: String) : this(level, listOf(Text(text)))
+}
 
-public data class Paragraph(val content: List<Inline>) : Block
+public data class Paragraph(val content: List<Inline>) : Block {
+    public constructor(text: String) : this(listOf(Text(text)))
+}
 
 public data class CodeBlock(val code: String, val language: String? = null) : Block
 
@@ -106,9 +112,6 @@ public enum class Alignment {
 }
 
 public data object ThematicBreak : Block
-
-/** Rendered verbatim as an HTML comment. Used for structural markers such as slide numbers. */
-public data class HtmlComment(val text: String) : Block
 
 /** Escape hatch for content that is already Markdown (or must not be touched). */
 public data class RawBlock(val text: String) : Block

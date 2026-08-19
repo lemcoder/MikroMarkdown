@@ -10,7 +10,7 @@ import kotlin.system.measureNanoTime
  *
  * The CLI's wall clock is dominated by JVM startup and class loading, which says nothing about the pipeline itself.
  * This measures the stages separately on a warmed-up JVM, and separately reports the first conversion in a fresh JVM —
- * the one that pays for loading POI, PDFBox and Tika.
+ * the one that pays for class loading.
  *
  * Usage: ./gradlew :benchmark:run --args="[fixtureDir] [warmup] [iterations]"
  */

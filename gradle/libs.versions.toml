@@ -3,19 +3,12 @@ agp = "9.2.1"
 kotlin = "2.3.21"
 android-minSdk = "26"
 android-compileSdk = "37"
-vanniktechMavenPublish = "0.36.0"
 kotlinx-io = "0.9.0"
-kotlinx-serialization = "1.9.0"
 ksoup = "0.2.6"
 korlibs = "6.0.0"
 konanplugin = "1.2.0-alpha06"
 kotlinx-resources = "0.15.0"
-
-commons-csv = "1.14.1"
-jackson = "2.21.3"
 junit = "6.1.0"
-tika = "3.3.0"
-coreKtx = "1.7.0"
 detekt = "1.23.8"
 ktfmt = "0.27.0"
 konsist = "0.17.3"
@@ -25,22 +18,14 @@ kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotl
 kotlinx-io-core = { module = "org.jetbrains.kotlinx:kotlinx-io-core", version.ref = "kotlinx-io" }
 ksoup = { module = "com.fleeksoft.ksoup:ksoup", version.ref = "ksoup" }
 korlibs-compression = { module = "com.soywiz:korlibs-compression", version.ref = "korlibs" }
-kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
 kotlinx-resources = { module = "com.goncalossilva:resources", version.ref = "kotlinx-resources" }
-
-commons-csv = { module = "org.apache.commons:commons-csv", version.ref = "commons-csv" }
-jackson-kotlin = { module = "com.fasterxml.jackson.module:jackson-module-kotlin", version.ref = "jackson" }
 junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit" }
-tika-core = { module = "org.apache.tika:tika-core", version.ref = "tika" }
-core-ktx = { group = "androidx.test", name = "core-ktx", version.ref = "coreKtx" }
 konsist = { module = "com.lemonappdev:konsist", version.ref = "konsist" }
 
 [plugins]
 android-kotlin-multiplatform-library = { id = "com.android.kotlin.multiplatform.library", version.ref = "agp" }
 kotlinMultiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
-kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
-vanniktech-mavenPublish = { id = "com.vanniktech.maven.publish", version.ref = "vanniktechMavenPublish" }
 kotlinx-resources = { id = "com.goncalossilva.resources", version.ref = "kotlinx-resources" }
 detekt = { id = "io.gitlab.arturbosch.detekt", version.ref = "detekt" }
 konanplugin = { id = "io.github.lemcoder.konanplugin", version.ref = "konanplugin" }
