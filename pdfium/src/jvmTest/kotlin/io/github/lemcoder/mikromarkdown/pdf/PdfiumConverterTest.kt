@@ -26,6 +26,23 @@ class PdfiumConverterTest {
     }
 
     /**
+     * Converting twice in one process must read the same both times.
+     *
+     * It did not. `FPDF_LoadMemDocument` reads the caller's buffer for as long as the document is open, and the
+     * generated bridge released it before returning, so pdfium spent every page load reading memory the JVM had taken
+     * back. The first conversion in a process was right and the rest lost four generated spaces.
+     */
+    @Test
+    fun `converting the same bytes twice gives the same document`() {
+        val bytes = fixture.readBytes()
+        val first = PdfiumConverter().parse(bytes, StreamInfo(extension = "pdf"))
+        val second = PdfiumConverter().parse(bytes, StreamInfo(extension = "pdf"))
+
+        assertEquals(first.blocks, second.blocks)
+        assertContains(first.blocks.joinToString { it.toString() }, "AutoGen uses")
+    }
+
+    /**
      * Every marker in this paper is a wrap, and the character boxes say so.
      *
      * The assertion is the geometry's, not the text's: it is what separates "pdfium removed a hyphen here" from "the

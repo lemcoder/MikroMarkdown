@@ -1,11 +1,12 @@
 package io.github.lemcoder.mikromarkdown.pdf
 
+import java.io.File
 import pdfium.kniBridge1
 import pdfium.kniBridge15
 import pdfium.kniBridge16
 import pdfium.kniBridge26
 import pdfium.kniBridge27
-import pdfium.kniBridge5
+import pdfium.kniBridge4
 import pdfium.kniBridge52
 import pdfium.kniBridge53
 import pdfium.kniBridge54
@@ -26,26 +27,41 @@ private val pdfiumLibrary: Lazy<Unit> = lazy { initLibrary() }
  *
  * The bridges are numbered rather than named — that is what a runtime-free binding looks like — so each is wrapped here
  * with the name from its doc comment, and nothing else in the module sees them.
+ *
+ * The bytes reach pdfium as a file rather than as a buffer. `FPDF_LoadMemDocument` keeps the caller's pointer and
+ * reads through it for as long as the document is open, but the generated bridge pairs `GetByteArrayElements` with
+ * `ReleaseByteArrayElements` and lets go before it returns, so every page load after that reads memory the JVM has
+ * taken back. It mostly works, which is the worst way to fail: the first conversion in a process reads an untouched
+ * region and is correct, later ones come back four generated spaces short and `AutoGen uses` reads as `AutoGenuses`.
+ * Zeroing the array under an open document drops extraction to nothing, which is what proved it. `FPDF_LoadDocument`
+ * owns everything it reads. The native leg needs none of this: `usePinned` holds the array for the document's life.
  */
 internal actual fun extractPages(bytes: ByteArray): List<PageText> {
     val pages = mutableListOf<PageText>()
 
     pdfiumLibrary.value
-    val document = loadDocument(bytes, null)
-    if (document == 0L) return emptyList()
+    // The file has to outlive the document: pdfium reads it lazily, the same way it would read a buffer.
+    val file = File.createTempFile("mikromarkdown", ".pdf")
     try {
-        for (index in 0 until pageCount(document)) {
-            val page = loadPage(document, index)
-            if (page == 0L) continue
-            val textPage = loadTextPage(page)
-            if (textPage != 0L) {
-                pages += pageText(textPage)
-                closeTextPage(textPage)
+        file.writeBytes(bytes)
+        val document = loadDocument(file.absolutePath, null)
+        if (document == 0L) return emptyList()
+        try {
+            for (index in 0 until pageCount(document)) {
+                val page = loadPage(document, index)
+                if (page == 0L) continue
+                val textPage = loadTextPage(page)
+                if (textPage != 0L) {
+                    pages += pageText(textPage)
+                    closeTextPage(textPage)
+                }
+                closePage(page)
             }
-            closePage(page)
+        } finally {
+            closeDocument(document)
         }
     } finally {
-        closeDocument(document)
+        file.delete()
     }
 
     return pages
@@ -94,7 +110,7 @@ private fun startsLowerLine(textPage: Long, index: Int): Boolean {
 
 private fun initLibrary() = kniBridge1()
 
-private fun loadDocument(bytes: ByteArray, password: String?): Long = kniBridge5(bytes, bytes.size, password)
+private fun loadDocument(path: String, password: String?): Long = kniBridge4(path, password)
 
 private fun pageCount(document: Long): Int = kniBridge15(document)
 
