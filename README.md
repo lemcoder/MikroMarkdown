@@ -39,9 +39,10 @@ bytes ──► MimeDetector ──► DocumentConverter.parse ──► Documen
 
 Converters contain no Markdown syntax, so escaping, table shaping, list indentation and spacing are
 fixed once for all formats. Every converter lives in `commonMain` and runs on every target, so the
-library has one registration list rather than one per platform and no third-party JVM dependency at
-all; only PDF is platform-specific, and it lives in its own module because it needs a native
-library. The model is
+library has one registration list rather than one per platform and one dependency set rather than a
+JVM-only one on top: Tika, PDFBox and POI are gone, and what is left — kotlinx-io, Ksoup and
+korlibs-compression — is multiplatform and shared by every target. Only PDF is platform-specific,
+and it lives in its own module because it needs a native library. The model is
 public: `mid.parse(path)` returns the `Document`, and `ConversionResult.document` exposes it
 alongside the rendered Markdown.
 
@@ -56,12 +57,9 @@ println(compact.render(document))
 
 ## Setup
 
-```kotlin
-// build.gradle.kts
-dependencies {
-    implementation("io.github.lemcoder:mikromarkdown:0.1.0")
-}
-```
+Nothing is published yet: the project builds and tests from source, and no module is configured to
+publish. Build it with `./gradlew build`, and depend on `:library` from a composite build (PDF adds
+`:pdfium`) until a release is wired up.
 
 ## Usage
 

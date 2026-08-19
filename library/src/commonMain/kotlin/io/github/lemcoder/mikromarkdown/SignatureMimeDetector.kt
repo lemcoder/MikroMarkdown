@@ -35,9 +35,6 @@ public object SignatureMimeDetector : MimeDetector {
             "xml" to "application/xml",
         )
 
-    /** ZIP-based formats are told apart by extension; the signature only proves it is a package. */
-    private val zipExtensions = setOf("epub", "zip")
-
     override fun detect(path: String): StreamInfo = describe(path, readSignature(path))
 
     override fun detect(path: String, bytes: ByteArray): StreamInfo =
@@ -58,8 +55,13 @@ public object SignatureMimeDetector : MimeDetector {
     private fun mimetypeOf(signature: ByteArray, extension: String?): String? =
         when {
             signature.startsWith("%PDF") -> "application/pdf"
-            // EPUB and every OOXML container is a ZIP; the extension says which one, and only EPUB is ours.
-            signature.startsWith("PK") -> byExtension[extension.takeIf { it in zipExtensions }] ?: "application/zip"
+            // EPUB and every OOXML container is a ZIP; the extension says which one, and only EPUB is ours. The rest
+            // are reported as the package they are, which is what leaves the caller a message naming a real format.
+            signature.startsWith("PK") -> if (extension == "epub") "application/epub+zip" else "application/zip"
+            // Legacy OLE compound files: .doc/.xls/.ppt, which no converter handles. Naming the container is what
+            // leaves the caller a message about a format rather than "No converter found for: unknown"; the OOXML
+            // mimetypes are not restored with it, because their extension already reaches the caller in [StreamInfo].
+            signature.startsWithBytes(0xD0, 0xCF, 0x11, 0xE0) -> "application/x-ole-storage"
             else -> byExtension[extension]
         }
 
@@ -77,5 +79,11 @@ public object SignatureMimeDetector : MimeDetector {
     private fun ByteArray.startsWith(prefix: String): Boolean {
         if (size < prefix.length) return false
         return prefix.indices.all { this[it].toInt().toChar() == prefix[it] }
+    }
+
+    /** Signatures outside ASCII are spelled as the bytes they are. */
+    private fun ByteArray.startsWithBytes(vararg prefix: Int): Boolean {
+        if (size < prefix.size) return false
+        return prefix.indices.all { this[it] == prefix[it].toByte() }
     }
 }
