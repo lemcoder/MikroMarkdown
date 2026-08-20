@@ -15,7 +15,9 @@ import io.github.lemcoder.mikromarkdown.model.plainTextBlocks
  * ```
  *
  * The extraction itself is per-platform — cinterop on native, generated JNI bridges on the JVM — but both reach the
- * same pdfium, and everything above [extractText] is shared.
+ * same pdfium, and everything above [extractPages] is shared: each leg reports what pdfium saw, and one copy of the
+ * rules here turns it into a document. Deciding what a wrapped hyphen meant belongs to `plainTextBlocks`, which reads
+ * the whole document rather than one page.
  */
 public class PdfiumConverter : DocumentConverter {
 
@@ -24,50 +26,8 @@ public class PdfiumConverter : DocumentConverter {
     }
 
     override fun parse(bytes: ByteArray, info: StreamInfo): Document =
-        Document(blocks = plainTextBlocks(extractText(bytes).joinHyphenatedWords()))
-
-    /**
-     * pdfium emits U+FFFE where a glyph has no Unicode mapping, which in a typeset document is nearly always the hyphen
-     * at a line break.
-     *
-     * Dropping it always would fuse real compounds — "chat-optimized" became "chatoptimized" — so the document decides:
-     * if both halves appear elsewhere as words in their own right the hyphen was the author's and is restored,
-     * otherwise the halves are one broken word and are joined. The halves themselves are cut from the vocabulary first,
-     * since they are only in the text because the break put them there.
-     *
-     * This is a heuristic standing in for geometry. A hyphenation hyphen ends a line and a compound hyphen does not,
-     * which `FPDFText_GetCharBox` would answer outright.
-     */
-    private fun String.joinHyphenatedWords(): String {
-        if (indexOf(UNMAPPED_GLYPH) < 0) return this
-
-        val vocabulary = WORD.findAll(replace(HYPHEN_BREAK, " ")).map { it.value.lowercase() }.toSet()
-        val out = StringBuilder(length)
-        for (index in indices) {
-            val char = this[index]
-            if (char != UNMAPPED_GLYPH) {
-                out.append(char)
-                continue
-            }
-            var wordStart = out.length
-            while (wordStart > 0 && out[wordStart - 1].isLetter()) wordStart--
-            val left = out.subSequence(wordStart, out.length).toString().lowercase()
-            val right = substring(index + 1).takeWhile { it.isLetter() }.lowercase()
-            if (isRealCompound(left, right, vocabulary)) out.append('-')
-        }
-        return out.toString()
-    }
-
-    /** A hyphen the author wrote, rather than one the typesetter added at a line break. */
-    private fun isRealCompound(left: String, right: String, vocabulary: Set<String>): Boolean =
-        left.isNotEmpty() && right.isNotEmpty() && left in vocabulary && right in vocabulary
-
-    private companion object {
-        const val UNMAPPED_GLYPH = '\uFFFE'
-        val WORD = Regex("[\\p{L}]{2,}")
-        val HYPHEN_BREAK = Regex("\\p{L}+\uFFFE\\p{L}+")
-    }
+        Document(blocks = plainTextBlocks(extractPages(bytes).restored()))
 }
 
-/** Every page's text, concatenated, one page per line. */
-internal expect fun extractText(bytes: ByteArray): String
+/** Every page, in order; [PageText] carries the text and the wraps pdfium collapsed. */
+internal expect fun extractPages(bytes: ByteArray): List<PageText>

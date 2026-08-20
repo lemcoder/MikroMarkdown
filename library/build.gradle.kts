@@ -21,10 +21,7 @@ kotlin {
         testRuns["test"].executionTask.configure { useJUnitPlatform() }
     }
 
-    // Spike: a native target to see how close a real binary gets to the Rust implementation.
-    // The shared integration tests expect JVM-only formats, so native test compilation stays off
-    // until the native target carries real converters.
-    macosArm64 { compilations.getByName("test") { compileTaskProvider.configure { enabled = false } } }
+    macosArm64()
 
     androidLibrary {
         namespace = "io.github.lemcoder.mikromarkdown"
@@ -40,12 +37,10 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             implementation(libs.kotlinx.io.core)
-            // Phase 0 of the commonMain migration: HTML parsing and the inflate that ZIP needs.
+            // HTML parsing, and the inflate that EPUB's ZIP container needs.
             implementation(libs.ksoup)
             implementation(libs.korlibs.compression)
         }
-
-        jvmMain { dependencies { implementation(libs.tika.core) } }
 
         commonTest.dependencies {
             implementation(libs.kotlin.test)
@@ -60,26 +55,28 @@ kotlin {
     }
 }
 
-// ktfmt-gradle only derives tasks for the common and JVM source sets, so the Android
-// ones — where half the converters live — would go unformatted and unchecked.
+// ktfmt-gradle only derives tasks for the common and JVM source sets, so every other one — Android's
+// today, a native one tomorrow — would go unformatted and unchecked. Everything under src/ that ktfmt
+// does not already cover is named here by exclusion, so a new target needs no edit to this block.
 run {
-    val androidSources = fileTree("src") { include("android*/**/*.kt") }
+    val derived = listOf("commonMain", "commonTest", "jvmMain", "jvmTest")
+    val remainingSources = fileTree("src") { include("**/*.kt").exclude(derived.map { "$it/**" }) }
     val template = tasks.named<com.ncorti.ktfmt.gradle.tasks.KtfmtFormatTask>("ktfmtFormatKmpCommonMain")
 
-    val formatAndroid =
-        tasks.register<com.ncorti.ktfmt.gradle.tasks.KtfmtFormatTask>("ktfmtFormatAndroidSourceSets") {
+    val formatRemaining =
+        tasks.register<com.ncorti.ktfmt.gradle.tasks.KtfmtFormatTask>("ktfmtFormatRemainingSourceSets") {
             ktfmtClasspath.from(template.map { it.ktfmtClasspath })
             formattingOptionsBean.set(template.flatMap { it.formattingOptionsBean })
-            setSource(androidSources)
+            setSource(remainingSources)
         }
-    val checkAndroid =
-        tasks.register<com.ncorti.ktfmt.gradle.tasks.KtfmtCheckTask>("ktfmtCheckAndroidSourceSets") {
+    val checkRemaining =
+        tasks.register<com.ncorti.ktfmt.gradle.tasks.KtfmtCheckTask>("ktfmtCheckRemainingSourceSets") {
             ktfmtClasspath.from(template.map { it.ktfmtClasspath })
             formattingOptionsBean.set(template.flatMap { it.formattingOptionsBean })
-            setSource(androidSources)
+            setSource(remainingSources)
         }
 
-    tasks.named("ktfmtFormat") { dependsOn(formatAndroid) }
-    tasks.named("ktfmtCheck") { dependsOn(checkAndroid) }
-    tasks.named("check") { dependsOn(checkAndroid) }
+    tasks.named("ktfmtFormat") { dependsOn(formatRemaining) }
+    tasks.named("ktfmtCheck") { dependsOn(checkRemaining) }
+    tasks.named("check") { dependsOn(checkRemaining) }
 }

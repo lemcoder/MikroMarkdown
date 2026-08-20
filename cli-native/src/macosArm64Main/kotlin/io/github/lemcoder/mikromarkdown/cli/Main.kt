@@ -6,8 +6,7 @@ import io.github.lemcoder.mikromarkdown.pdf.PdfiumConverter
 import kotlin.system.exitProcess
 
 /**
- * Minimal native entry point, kept deliberately bare so its timings measure conversion rather than an argument parser.
- * The JVM CLI remains the full one.
+ * The command line tool, kept deliberately bare so its timings measure conversion rather than an argument parser.
  *
  * Several files may be given: a document boundary is the one point where everything the previous conversion allocated
  * is dead, which is what makes a manual collection policy possible at all. The default collector wins on measurement,

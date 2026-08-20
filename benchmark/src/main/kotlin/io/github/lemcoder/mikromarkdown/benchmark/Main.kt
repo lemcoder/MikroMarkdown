@@ -1,6 +1,7 @@
 package io.github.lemcoder.mikromarkdown.benchmark
 
 import io.github.lemcoder.mikromarkdown.MikroMarkdown
+import io.github.lemcoder.mikromarkdown.MikroMarkdownException
 import io.github.lemcoder.mikromarkdown.StreamInfo
 import java.io.File
 import kotlin.system.measureNanoTime
@@ -10,7 +11,7 @@ import kotlin.system.measureNanoTime
  *
  * The CLI's wall clock is dominated by JVM startup and class loading, which says nothing about the pipeline itself.
  * This measures the stages separately on a warmed-up JVM, and separately reports the first conversion in a fresh JVM —
- * the one that pays for loading POI, PDFBox and Tika.
+ * the one that pays for class loading.
  *
  * Usage: ./gradlew :benchmark:run --args="[fixtureDir] [warmup] [iterations]"
  */
@@ -30,11 +31,14 @@ fun main(args: Array<String>) {
     require(files.isNotEmpty()) { "no fixtures in ${fixtures.absolutePath}" }
 
     val first = files.first()
-    val coldStart = measureNanoTime { MikroMarkdown().convert(first.absolutePath) }
-    report("first conversion in a fresh JVM, class loading included (${first.name})", coldStart)
+    // The cold number is the first conversion in the process or it is nothing: a second attempt would run warm.
+    runCatching { measureNanoTime { MikroMarkdown().convert(first.absolutePath) } }
+        .onSuccess { report("first conversion in a fresh JVM, class loading included (${first.name})", it) }
+        .onFailure { println("no cold-start timing: ${first.name} has no registered converter") }
     println()
 
     val mikroMarkdown = MikroMarkdown()
+    val skipped = mutableListOf<String>()
 
     println("Best of $iterations runs after $warmup warmup runs, milliseconds.")
     println()
@@ -45,7 +49,14 @@ fun main(args: Array<String>) {
         val bytes = file.readBytes()
         val info = StreamInfo(extension = file.extension, filename = file.name, localPath = file.absolutePath)
 
-        repeat(warmup) { mikroMarkdown.convert(bytes, info) }
+        // The directory keeps fixtures no converter accepts: the office formats, and PDF until `:pdfium` is
+        // registered. They are named below rather than dropped, so a missing row never reads as a fast one.
+        try {
+            repeat(warmup) { mikroMarkdown.convert(bytes, info) }
+        } catch (e: MikroMarkdownException) {
+            skipped += "${file.name} (${e.message})"
+            continue
+        }
 
         val parse = best(iterations) { mikroMarkdown.parse(bytes, info) }
         val convertBytes = best(iterations) { mikroMarkdown.convert(bytes, info) }
@@ -57,6 +68,11 @@ fun main(args: Array<String>) {
             "| ${file.name} | ${file.length() / 1024} | ${parse.ms()} | ${render.ms()} | " +
                 "${convertBytes.ms()} | ${convertPath.ms()} |"
         )
+    }
+
+    if (skipped.isNotEmpty()) {
+        println()
+        println("Skipped: ${skipped.joinToString()}")
     }
 }
 
