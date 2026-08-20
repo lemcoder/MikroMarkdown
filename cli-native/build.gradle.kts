@@ -2,15 +2,9 @@ plugins { alias(libs.plugins.kotlinMultiplatform) }
 
 kotlin {
     macosArm64 {
-        // Kotlin/Native does not carry a klib's linker options to the binary that uses it, so the
-        // consumer names pdfium itself. Worth turning into a shared convention if a second
-        // consumer appears.
-        val pdfiumLib = rootProject.layout.projectDirectory.dir("pdfium/build/pdfium/mac-arm64/lib").asFile
-
-        binaries.executable {
-            entryPoint = "io.github.lemcoder.mikromarkdown.cli.main"
-            linkerOpts("-L${pdfiumLib.absolutePath}", "-lpdfium", "-rpath", pdfiumLib.absolutePath)
-        }
+        // Nothing about pdfium here: its cinterop .def records where the library is, and cinterop
+        // hands those options to whatever links the binding.
+        binaries.executable { entryPoint = "io.github.lemcoder.mikromarkdown.cli.main" }
 
         compilerOptions {
             // Worth about 8% on large inputs and nothing on small ones. Measured, not assumed:
