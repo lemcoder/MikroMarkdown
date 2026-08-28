@@ -22,3 +22,7 @@ include(":benchmark")
 include(":cli-native")
 
 include(":pdfium")
+
+include(":renderer-compose")
+
+include(":sample-android")

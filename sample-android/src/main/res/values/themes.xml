@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Compose draws the whole screen, so the platform theme only has to give the window a sensible
+      background and no action bar. Using the platform's own avoids a dependency on the Material
+      Components views library, which is where Theme.Material3.* lives and which nothing else needs.
+    -->
+    <style name="Theme.MikroMarkdown" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>
