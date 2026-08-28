@@ -119,18 +119,14 @@ class ArchitectureTest {
     }
 
     /**
-     * JVM and Android share one source set; only the factory and the PDF converter differ, because pdfbox-android is a
-     * separate library. Any other same-named file in two source sets means a copy that will drift.
+     * Every converter is common, so no production file has a per-target copy — the rule has no exceptions left. A
+     * same-named file in two source sets means a copy that will drift.
      */
     @Test
     fun `production files are not copied between source sets`() {
-        val expectedPerTarget = setOf("MikroMarkdownFactory", "PdfConverter")
+        val copied = production.filter { it.path.contains("/src/") }.groupBy { it.name }.filterValues { it.size > 1 }
 
-        val copied =
-            production.filter { it.path.contains("/src/") }.groupBy { it.name }.filterValues { it.size > 1 }.keys -
-                expectedPerTarget
-
-        assertEquals(emptySet(), copied, "these files exist in more than one source set")
+        assertEquals(emptySet(), copied.keys, "these files exist in more than one source set")
     }
 
     private fun productionIn(packageFragment: String) = production.filter {

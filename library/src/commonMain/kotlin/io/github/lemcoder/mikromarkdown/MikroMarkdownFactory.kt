@@ -9,17 +9,18 @@ import io.github.lemcoder.mikromarkdown.converters.PlainTextConverter
 import io.github.lemcoder.mikromarkdown.converters.XmlConverter
 
 /**
- * A [MikroMarkdown] with the converters that need no platform library.
+ * A [MikroMarkdown] with every converter the library ships.
  *
- * PDF is the only format still missing here; everything else the library converts is shared.
+ * One list for every target, because every converter is now common. PDF is the exception and is not here: it costs a
+ * native library, so the `:pdfium` module provides it and the caller opts in with `register(PdfiumConverter())`.
  */
 public fun MikroMarkdown(): MikroMarkdown =
     MikroMarkdown(SignatureMimeDetector).apply {
         register(MarkdownPassthroughConverter())
         register(HtmlConverter())
-        register(EpubConverter())
         register(CsvConverter())
         register(JsonConverter())
         register(XmlConverter())
+        register(EpubConverter())
         register(PlainTextConverter(), priority = 10.0)
     }

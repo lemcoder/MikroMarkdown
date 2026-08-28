@@ -8,7 +8,6 @@ import io.github.lemcoder.mikromarkdown.model.CodeSpan
 import io.github.lemcoder.mikromarkdown.model.Document
 import io.github.lemcoder.mikromarkdown.model.Emphasis
 import io.github.lemcoder.mikromarkdown.model.Heading
-import io.github.lemcoder.mikromarkdown.model.HtmlComment
 import io.github.lemcoder.mikromarkdown.model.Image
 import io.github.lemcoder.mikromarkdown.model.Inline
 import io.github.lemcoder.mikromarkdown.model.LineBreak
@@ -120,8 +119,6 @@ public class MarkdownRenderer(private val options: MarkdownOptions = MarkdownOpt
             is Table -> writeTable(block, out, prefix)
 
             ThematicBreak -> out.append("---")
-
-            is HtmlComment -> out.append("<!-- ").append(block.text.trim()).append(" -->")
 
             // Already-Markdown content: only whitespace is normalized, never syntax.
             is RawBlock ->

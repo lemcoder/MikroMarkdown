@@ -12,13 +12,22 @@ permissions:
 
 jobs:
   test:
+    name: ${{ matrix.name }}
     strategy:
+      fail-fast: false
       matrix:
         include:
-          - target: jvmTest
+          - name: jvm
+            tasks: ":library:jvmTest"
             os: ubuntu-latest
-          - target: testAndroidHostTest
+          - name: android
+            tasks: ":library:testAndroidHostTest"
             os: ubuntu-latest
+          # The native target and the pdfium bindings are built against the mac-arm64 pdfium, so both
+          # legs need a macOS runner. Without this job the native source sets are never even compiled.
+          - name: native and pdfium
+            tasks: ":library:macosArm64Test :pdfium:jvmTest"
+            os: macos-latest
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -32,7 +41,7 @@ jobs:
           distribution: 'temurin'
       - name: Run tests
         uses: gradle/actions/setup-gradle@v4
-      - run: ./gradlew :library:${{ matrix.target }}
+      - run: ./gradlew ${{ matrix.tasks }}
 
   lint:
     runs-on: ubuntu-latest

@@ -10,11 +10,11 @@ import kotlinx.io.readByteArray
  *
  * This is the default because it costs microseconds: it reads a handful of bytes and consults a fixed table, where a
  * full MIME registry (Tika) spends ~90 ms building itself on first use — more than the entire conversion for most
- * documents. Content still wins over the extension, so a mislabelled `.txt` that is really a PDF or an OOXML package is
+ * documents. Content still wins over the extension, so a mislabelled `.txt` that is really a PDF or a ZIP package is
  * identified correctly.
  *
- * Formats that are plain text with no signature (CSV, JSON, XML, HTML, Markdown) are recognised by extension. Pass
- * [TikaMimeDetector] to `MikroMarkdown` if you need content sniffing for those too.
+ * Formats that are plain text with no signature (CSV, JSON, XML, HTML, Markdown) are recognised by extension. Content
+ * sniffing for those is a [MimeDetector] away — it is a `fun interface`, and the pipeline takes any implementation.
  */
 public object SignatureMimeDetector : MimeDetector {
 
@@ -23,7 +23,6 @@ public object SignatureMimeDetector : MimeDetector {
     private val byExtension =
         mapOf(
             "csv" to "text/csv",
-            "docx" to "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             "epub" to "application/epub+zip",
             "htm" to "text/html",
             "html" to "text/html",
@@ -31,15 +30,10 @@ public object SignatureMimeDetector : MimeDetector {
             "md" to "text/markdown",
             "markdown" to "text/markdown",
             "pdf" to "application/pdf",
-            "pptx" to "application/vnd.openxmlformats-officedocument.presentationml.presentation",
             "txt" to "text/plain",
             "log" to "text/plain",
-            "xlsx" to "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             "xml" to "application/xml",
         )
-
-    /** ZIP-based formats are told apart by extension; the signature only proves it is a package. */
-    private val zipExtensions = setOf("docx", "xlsx", "pptx", "epub", "zip")
 
     override fun detect(path: String): StreamInfo = describe(path, readSignature(path))
 
@@ -61,10 +55,12 @@ public object SignatureMimeDetector : MimeDetector {
     private fun mimetypeOf(signature: ByteArray, extension: String?): String? =
         when {
             signature.startsWith("%PDF") -> "application/pdf"
-            // Every OOXML container and EPUB is a ZIP; the extension says which one.
-            signature.startsWith("PK") ->
-                if (extension in zipExtensions) byExtension[extension] ?: "application/zip" else "application/zip"
-            // Legacy OLE compound files: .doc/.xls/.ppt, which no converter handles yet.
+            // EPUB and every OOXML container is a ZIP; the extension says which one, and only EPUB is ours. The rest
+            // are reported as the package they are, which is what leaves the caller a message naming a real format.
+            signature.startsWith("PK") -> if (extension == "epub") "application/epub+zip" else "application/zip"
+            // Legacy OLE compound files: .doc/.xls/.ppt, which no converter handles. Naming the container is what
+            // leaves the caller a message about a format rather than "No converter found for: unknown"; the OOXML
+            // mimetypes are not restored with it, because their extension already reaches the caller in [StreamInfo].
             signature.startsWithBytes(0xD0, 0xCF, 0x11, 0xE0) -> "application/x-ole-storage"
             else -> byExtension[extension]
         }
@@ -85,8 +81,9 @@ public object SignatureMimeDetector : MimeDetector {
         return prefix.indices.all { this[it].toInt().toChar() == prefix[it] }
     }
 
+    /** Signatures outside ASCII are spelled as the bytes they are. */
     private fun ByteArray.startsWithBytes(vararg prefix: Int): Boolean {
         if (size < prefix.size) return false
-        return prefix.indices.all { this[it].toInt() and 0xFF == prefix[it] }
+        return prefix.indices.all { this[it] == prefix[it].toByte() }
     }
 }

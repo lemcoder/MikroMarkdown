@@ -18,7 +18,7 @@ Metrics per output:
     structure       headings / tables / list items / links / images / code fences
     table health    share of table rows whose column count matches the header
     hygiene         3+ blank-line runs, trailing whitespace, unescaped pipes
-    speed           best of N CLI runs, and the same minus measured JVM startup
+    speed           best of N CLI runs
 """
 from __future__ import annotations
 
@@ -196,15 +196,6 @@ def main() -> int:
         state = "ready" if engine.command else f"MISSING ({engine.note})"
         print(f"{engine.name:14} {state}", file=sys.stderr)
 
-    # JVM startup cost, so the Kotlin CLI's timing can be reported with and without it.
-    jvm_baseline = 0.0
-    mikro = next(e for e in engines if e.name == "mikromarkdown")
-    if mikro.command:
-        probe = out_dir / "_probe.txt"
-        probe.write_text("x\n")
-        _, jvm_baseline = mikro.run(probe)
-        probe.unlink()
-
     results: dict[str, dict[str, object]] = {}
     for fixture in fixtures:
         print(f"converting {fixture.name}", file=sys.stderr)
@@ -218,8 +209,7 @@ def main() -> int:
         results[fixture.name] = per_engine
 
     lines: list[str] = ["# Conversion benchmark", ""]
-    lines.append(f"Fixtures: {len(fixtures)} · runs per file: {RUNS} (best kept) · "
-                 f"measured JVM startup: {jvm_baseline * 1000:.0f} ms")
+    lines.append(f"Fixtures: {len(fixtures)} · runs per file: {RUNS} (best kept)")
     lines.append("")
     lines.append("Recall is against the *consensus* vocabulary: tokens (>3 chars) that at least two "
                  "engines emit for the same file. Missing tokens mean dropped content.")
@@ -248,11 +238,7 @@ def main() -> int:
             recall = len(own & consensus) / len(consensus) if consensus else 1.0
             unique = len(own - set().union(*[v for k, v in token_sets.items() if k != engine_name]) ) \
                 if len(token_sets) > 1 else len(own)
-            ms = data["seconds"] * 1000
-            if engine_name == "mikromarkdown":
-                ms_display = f"{ms:.0f} ({max(0.0, ms - jvm_baseline * 1000):.0f} warm)"
-            else:
-                ms_display = f"{ms:.0f}"
+            ms_display = f"{data['seconds'] * 1000:.0f}"
             lines.append(
                 f"| {engine_name} | {recall * 100:.1f}% | {unique} | {len(text)} | {s['headings']} | "
                 f"{s['list_items']} | {s['links']} | {s['images']} | {s['tables']} | {s['table_rows']} | "
