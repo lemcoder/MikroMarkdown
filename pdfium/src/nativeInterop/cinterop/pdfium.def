@@ -1,4 +1,8 @@
 # Bound by cinterop for native targets and, later, by the Konan plugin's JNI generator for the JVM.
-headers = fpdfview.h fpdf_text.h
+#
+# fpdf_edit.h is here for the image APIs — walking a page's objects and rendering an image to a
+# bitmap — which is the only way to get at the pictures in a PDF. It roughly doubles the generated
+# bridges, 176 to 414, and the JNI stub by 17 KB, against 6.4 MB of pdfium itself.
+headers = fpdfview.h fpdf_text.h fpdf_edit.h
 headerFilter = fpdf*.h
 package = pdfium

@@ -10,7 +10,10 @@ package io.github.lemcoder.mikromarkdown.pdf
  * [hyphenWraps] are the marker positions that `FPDFText_GetCharBox` confirms: the character after the marker really
  * does begin a lower line. That is the one thing the geometry answers outright, and it is what [restored] needs.
  */
-internal class PageText(val text: String, val hyphenWraps: IntArray)
+internal class PageText(val text: String, val hyphenWraps: IntArray, val images: List<PageImage> = emptyList()) {
+    /** The text side and the image side are read separately; this joins them. */
+    fun copyWith(images: List<PageImage>): PageText = PageText(text, hyphenWraps, images)
+}
 
 /** pdfium's stand-in for a hyphen it removed at a line break. */
 internal const val HYPHEN_MARKER: Char = '\uFFFE'

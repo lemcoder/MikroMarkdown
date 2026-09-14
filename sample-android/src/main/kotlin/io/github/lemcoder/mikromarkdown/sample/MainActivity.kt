@@ -34,6 +34,7 @@ import io.github.lemcoder.mikromarkdown.MikroMarkdownException
 import io.github.lemcoder.mikromarkdown.StreamInfo
 import io.github.lemcoder.mikromarkdown.compose.DocumentView
 import io.github.lemcoder.mikromarkdown.model.Document
+import io.github.lemcoder.mikromarkdown.pdf.PdfiumConverter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -62,7 +63,8 @@ private fun ReaderScreen() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     // One instance: registering the converters is the expensive part, and it is the same every time.
-    val mikroMarkdown = remember { MikroMarkdown() }
+    // PdfiumConverter is not in the factory's list — PDF costs a native library, so a caller opts in.
+    val mikroMarkdown = remember { MikroMarkdown().apply { register(PdfiumConverter()) } }
     var state: ReaderState by remember { mutableStateOf(ReaderState.Empty) }
 
     val picker =

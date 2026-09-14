@@ -1,5 +1,6 @@
 package io.github.lemcoder.mikromarkdown.compose
 
+import android.graphics.BitmapFactory
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -23,8 +24,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment as LayoutAlignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import io.github.lemcoder.mikromarkdown.model.Alignment as CellAlignment
@@ -33,6 +38,7 @@ import io.github.lemcoder.mikromarkdown.model.BlockQuote
 import io.github.lemcoder.mikromarkdown.model.CodeBlock
 import io.github.lemcoder.mikromarkdown.model.Document
 import io.github.lemcoder.mikromarkdown.model.Heading
+import io.github.lemcoder.mikromarkdown.model.Image as ModelImage
 import io.github.lemcoder.mikromarkdown.model.ListBlock
 import io.github.lemcoder.mikromarkdown.model.ListItem
 import io.github.lemcoder.mikromarkdown.model.Paragraph
@@ -69,7 +75,12 @@ public fun DocumentView(
 internal fun BlockView(block: Block, document: Document, modifier: Modifier = Modifier) {
     when (block) {
         is Heading -> Text(block.content.annotated(document), modifier, style = block.level.headingStyle())
-        is Paragraph -> Text(block.content.annotated(document), modifier, style = MaterialTheme.typography.bodyLarge)
+        // A paragraph that is only an image is a figure, and a figure is drawn rather than described.
+        is Paragraph ->
+            when (val figure = block.soleImage()) {
+                null -> Text(block.content.annotated(document), modifier, style = MaterialTheme.typography.bodyLarge)
+                else -> ImageView(figure, document, modifier)
+            }
         is CodeBlock -> CodeBlockView(block, modifier)
         is BlockQuote -> BlockQuoteView(block, document, modifier)
         is ListBlock -> ListBlockView(block, document, modifier)
@@ -80,6 +91,44 @@ internal fun BlockView(block: Block, document: Document, modifier: Modifier = Mo
         is RawBlock -> Text(block.text, modifier, style = MaterialTheme.typography.bodySmall)
     }
 }
+
+/** The one image a paragraph holds on its own, if that is all it holds. */
+private fun Paragraph.soleImage(): ModelImage? = content.singleOrNull() as? ModelImage
+
+/**
+ * An image the document carries.
+ *
+ * Only assets are drawn. A plain URL is a reference to somewhere else, and fetching it would put a network stack behind
+ * a function whose whole job is laying out a model that is already in memory — the alt text stands in until a caller
+ * supplies an image loader.
+ */
+@Composable
+private fun ImageView(image: ModelImage, document: Document, modifier: Modifier) {
+    val bitmap = rememberAssetBitmap(image.assetId, document)
+    if (bitmap == null) {
+        Text(image.alt.ifBlank { image.url }, modifier, style = MaterialTheme.typography.bodyMedium)
+        return
+    }
+    androidx.compose.foundation.Image(
+        bitmap = bitmap,
+        contentDescription = image.alt.ifBlank { null },
+        modifier = modifier.fillMaxWidth(),
+        contentScale = ContentScale.FillWidth,
+    )
+}
+
+/**
+ * Decodes an asset once per composition rather than on every frame.
+ *
+ * Bytes in the model are PNG or JPEG, which is what [BitmapFactory] takes; a stream it cannot decode returns null and
+ * the alt text takes over.
+ */
+@Composable
+private fun rememberAssetBitmap(assetId: String?, document: Document): ImageBitmap? =
+    remember(assetId, document) {
+        val bytes = document.assets.firstOrNull { it.id == assetId }?.bytes ?: return@remember null
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
+    }
 
 @Composable
 private fun CodeBlockView(block: CodeBlock, modifier: Modifier) {

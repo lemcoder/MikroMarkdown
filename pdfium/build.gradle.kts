@@ -128,6 +128,43 @@ kotlin.targets.getByName("android").compilations.getByName("main").jvmInterops {
     }
 }
 
+/**
+ * pdfium's own library, packaged beside the JNI stub.
+ *
+ * The stub is 34 KB and carries a `DT_NEEDED` on `libpdfium.so`. The Konan plugin packages the stub it builds and knows
+ * nothing about the prebuilt library that stub links against, so an APK gets the stub alone and `System.loadLibrary`
+ * fails at the first PDF with "library libpdfium.so not found". Only ABI-named directories may sit under jniLibs, which
+ * is what the copy is arranging.
+ */
+val pdfiumJniLibs = layout.buildDirectory.dir("pdfiumJniLibs")
+
+val copyPdfiumJniLibs by
+    tasks.registering(Copy::class) {
+        dependsOn("downloadPdfium")
+        into(pdfiumJniLibs)
+        for ((abi, platform) in pdfiumAbis) {
+            from(pdfiumRoot.dir("$platform/lib")) {
+                include("libpdfium.so")
+                into(abi)
+            }
+        }
+    }
+
+run {
+    val relative = pdfiumJniLibs.get().asFile.apply { mkdirs() }.relativeTo(projectDir).path
+
+    plugins.withId("com.android.kotlin.multiplatform.library") {
+        extensions
+            .findByType(com.android.build.api.variant.KotlinMultiplatformAndroidComponentsExtension::class.java)
+            ?.onVariants { variant -> variant.sources.jniLibs?.addStaticSourceDirectory(relative) }
+    }
+
+    // Nothing consumes the directory as a task output, so packaging needs the ordering spelled out.
+    tasks
+        .matching { it.name.contains("JniLibFolders") || it.name.contains("MergeJniLib") }
+        .configureEach { dependsOn(copyPdfiumJniLibs) }
+}
+
 // Every binding path needs the headers and the library unpacked first.
 tasks.matching { it.name.startsWith("cinteropPdfium") }.configureEach { dependsOn("downloadPdfium", writeLinkedDef) }
 

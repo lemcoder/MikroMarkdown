@@ -1,6 +1,14 @@
 package io.github.lemcoder.mikromarkdown.pdf
 
 import java.io.File
+import pdfium.FPDFImageObj_GetImageDataDecoded
+import pdfium.FPDFImageObj_GetImageDataRaw
+import pdfium.FPDFImageObj_GetImageFilter
+import pdfium.FPDFImageObj_GetImageFilterCount
+import pdfium.FPDFImageObj_GetImagePixelSize
+import pdfium.FPDFPageObj_GetType
+import pdfium.FPDFPage_CountObjects
+import pdfium.FPDFPage_GetObject
 import pdfium.FPDFText_ClosePage
 import pdfium.FPDFText_CountChars
 import pdfium.FPDFText_GetCharBox
@@ -52,7 +60,7 @@ internal actual fun extractPages(bytes: ByteArray): List<PageText> {
                 if (page == 0L) continue
                 val textPage = FPDFText_LoadPage(page)
                 if (textPage != 0L) {
-                    pages += pageText(textPage)
+                    pages += pageText(textPage).copyWith(pageImages(page, index))
                     FPDFText_ClosePage(textPage)
                 }
                 FPDF_ClosePage(page)
@@ -109,3 +117,57 @@ private fun startsLowerLine(textPage: Long, index: Int): Boolean {
     if (FPDFText_GetCharBox(textPage, index + 1, left, right, bottom, top) == 0) return false
     return top[0] < hyphenBottom
 }
+
+/**
+ * The images on a page, each as a file something can display.
+ *
+ * pdfium reports the pixel size and the decoded bytes through buffers a JVM caller can allocate, which is the only
+ * reason this is possible on this leg at all: the bitmap and metadata calls hand back raw addresses instead, and the
+ * generated bridge passes those as a `Long` the JVM cannot read.
+ */
+private fun pageImages(page: Long, pageIndex: Int): List<PageImage> {
+    val out = mutableListOf<PageImage>()
+    for (index in 0 until FPDFPage_CountObjects(page)) {
+        val obj = FPDFPage_GetObject(page, index)
+        if (obj == 0L || FPDFPageObj_GetType(obj) != OBJECT_TYPE_IMAGE) continue
+
+        val width = IntArray(1)
+        val height = IntArray(1)
+        if (FPDFImageObj_GetImagePixelSize(obj, width, height) == 0) continue
+
+        // A JPEG stream is already a file; anything else is pixels that need a container.
+        val jpeg = if (obj.hasJpegFilter()) obj.readInto(::FPDFImageObj_GetImageDataRaw) else null
+        val pixels = if (jpeg == null) obj.readInto(::FPDFImageObj_GetImageDataDecoded) else null
+
+        imageAsset(
+                pixels = pixels ?: ByteArray(0),
+                width = width[0],
+                height = height[0],
+                jpeg = jpeg,
+                id = "page${pageIndex + 1}-image${index + 1}",
+            )
+            ?.let { out += it }
+    }
+    return out
+}
+
+/** pdfium's two-call buffer protocol: ask for the length, allocate, ask again. */
+private fun Long.readInto(read: (Long, ByteArray?, Long) -> Long): ByteArray? {
+    val length = read(this, null, 0L)
+    if (length <= 0L || length > MAX_IMAGE_BYTES) return null
+    val buffer = ByteArray(length.toInt())
+    return if (read(this, buffer, length) == 0L) null else buffer
+}
+
+private fun Long.hasJpegFilter(): Boolean =
+    (0 until FPDFImageObj_GetImageFilterCount(this)).any { filter ->
+        val length = FPDFImageObj_GetImageFilter(this, filter, null, 0L)
+        if (length <= 0L) return@any false
+        val name = ByteArray(length.toInt())
+        FPDFImageObj_GetImageFilter(this, filter, name, length)
+        // The buffer is a NUL-terminated C string.
+        name.decodeToString().trimEnd('\u0000') == JPEG_FILTER
+    }
+
+/** A guard against a malformed stream claiming a size that would exhaust the heap. */
+private const val MAX_IMAGE_BYTES = 64L * 1024 * 1024

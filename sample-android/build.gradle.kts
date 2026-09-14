@@ -31,6 +31,8 @@ android {
 
 dependencies {
     implementation(project(":renderer-compose"))
+    // PDF is opt-in: it costs a native library, so the app asks for it explicitly.
+    implementation(project(":pdfium"))
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.material3)
     implementation(libs.compose.ui)

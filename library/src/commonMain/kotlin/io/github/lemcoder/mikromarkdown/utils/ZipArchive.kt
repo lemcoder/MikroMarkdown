@@ -39,6 +39,49 @@ internal class ZipArchive private constructor(private val source: ByteArray, pri
     fun readText(name: String): String? = read(name)?.decodeToString()
 
     /**
+     * The entry a relative reference points at, or null if it names nothing in the archive.
+     *
+     * A chapter's `src` is relative to the chapter, not the archive root, and it is URL-escaped: a space arrives as
+     * `%20` and a parent directory as `../`. Anything with a scheme resolves to null, because a remote image is a
+     * reference to somewhere else and a `data:` URI carries its own bytes.
+     */
+    fun resolve(directory: String, reference: String): String? {
+        if (reference.isBlank() || "://" in reference || reference.startsWith("data:")) return null
+        val path = reference.substringBefore('#').substringBefore('?').percentDecoded()
+        if (path.isEmpty()) return null
+
+        val segments = mutableListOf<String>()
+        if (!path.startsWith("/")) segments += directory.split('/').filter { it.isNotEmpty() }
+        for (segment in path.split('/')) {
+            when (segment) {
+                "",
+                "." -> Unit
+                ".." -> segments.removeLastOrNull()
+                else -> segments += segment
+            }
+        }
+        return segments.joinToString("/").takeIf { it in entries }
+    }
+
+    private fun String.percentDecoded(): String {
+        if ('%' !in this) return this
+        val out = StringBuilder(length)
+        var index = 0
+        while (index < length) {
+            val char = this[index]
+            val hex = if (char == '%' && index + 2 < length) substring(index + 1, index + 3).toIntOrNull(16) else null
+            if (hex == null) {
+                out.append(char)
+                index++
+            } else {
+                out.append(hex.toChar())
+                index += 3
+            }
+        }
+        return out.toString()
+    }
+
+    /**
      * Where an entry's bytes begin.
      *
      * The central directory records where the local header is, but the local header repeats the name and extra field

@@ -1,7 +1,9 @@
 package io.github.lemcoder.mikromarkdown.pdf
 
+import kotlinx.cinterop.ByteVar
 import kotlinx.cinterop.DoubleVar
 import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.UIntVar
 import kotlinx.cinterop.UShortVar
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.alloc
@@ -9,8 +11,18 @@ import kotlinx.cinterop.allocArray
 import kotlinx.cinterop.get
 import kotlinx.cinterop.memScoped
 import kotlinx.cinterop.ptr
+import kotlinx.cinterop.readBytes
+import kotlinx.cinterop.toKString
 import kotlinx.cinterop.usePinned
 import kotlinx.cinterop.value
+import pdfium.FPDFImageObj_GetImageDataDecoded
+import pdfium.FPDFImageObj_GetImageDataRaw
+import pdfium.FPDFImageObj_GetImageFilter
+import pdfium.FPDFImageObj_GetImageFilterCount
+import pdfium.FPDFImageObj_GetImagePixelSize
+import pdfium.FPDFPageObj_GetType
+import pdfium.FPDFPage_CountObjects
+import pdfium.FPDFPage_GetObject
 import pdfium.FPDFText_ClosePage
 import pdfium.FPDFText_CountChars
 import pdfium.FPDFText_GetCharBox
@@ -51,7 +63,7 @@ internal actual fun extractPages(bytes: ByteArray): List<PageText> {
                 val page = FPDF_LoadPage(document, index) ?: continue
                 val textPage = FPDFText_LoadPage(page)
                 if (textPage != null) {
-                    pages += pageText(textPage)
+                    pages += pageText(textPage).copyWith(pageImages(page, index))
                     FPDFText_ClosePage(textPage)
                 }
                 FPDF_ClosePage(page)
@@ -111,3 +123,67 @@ private fun startsLowerLine(textPage: pdfium.FPDF_TEXTPAGE, index: Int): Boolean
     if (FPDFText_GetCharBox(textPage, index + 1, left.ptr, right.ptr, bottom.ptr, top.ptr) == 0) return false
     top.value < hyphenBottom
 }
+
+/**
+ * The images on a page, each as a file something can display.
+ *
+ * The same rules as the JVM leg, which is where they are written down; cinterop can allocate the buffers directly
+ * rather than going through arrays, so only the plumbing differs.
+ */
+@OptIn(ExperimentalForeignApi::class)
+private fun pageImages(page: pdfium.FPDF_PAGE, pageIndex: Int): List<PageImage> {
+    val out = mutableListOf<PageImage>()
+    for (index in 0 until FPDFPage_CountObjects(page)) {
+        val obj = FPDFPage_GetObject(page, index) ?: continue
+        if (FPDFPageObj_GetType(obj) != OBJECT_TYPE_IMAGE) continue
+
+        val size =
+            memScoped {
+                val width = alloc<UIntVar>()
+                val height = alloc<UIntVar>()
+                if (FPDFImageObj_GetImagePixelSize(obj, width.ptr, height.ptr) == 0) null
+                else width.value.toInt() to height.value.toInt()
+            } ?: continue
+
+        val jpeg = if (obj.hasJpegFilter()) obj.readInto(::FPDFImageObj_GetImageDataRaw) else null
+        val pixels = if (jpeg == null) obj.readInto(::FPDFImageObj_GetImageDataDecoded) else null
+
+        imageAsset(
+                pixels = pixels ?: ByteArray(0),
+                width = size.first,
+                height = size.second,
+                jpeg = jpeg,
+                id = "page${pageIndex + 1}-image${index + 1}",
+            )
+            ?.let { out += it }
+    }
+    return out
+}
+
+/** pdfium's two-call buffer protocol: ask for the length, allocate, ask again. */
+@OptIn(ExperimentalForeignApi::class)
+private fun pdfium.FPDF_PAGEOBJECT.readInto(
+    read: (pdfium.FPDF_PAGEOBJECT?, kotlinx.cinterop.CValuesRef<*>?, ULong) -> ULong
+): ByteArray? {
+    val length = read(this, null, 0uL)
+    if (length == 0uL || length > MAX_IMAGE_BYTES) return null
+    return memScoped {
+        val buffer = allocArray<ByteVar>(length.toInt())
+        if (read(this@readInto, buffer, length) == 0uL) null else buffer.readBytes(length.toInt())
+    }
+}
+
+@OptIn(ExperimentalForeignApi::class)
+private fun pdfium.FPDF_PAGEOBJECT.hasJpegFilter(): Boolean =
+    (0 until FPDFImageObj_GetImageFilterCount(this)).any { filter ->
+        val length = FPDFImageObj_GetImageFilter(this, filter, null, 0uL)
+        if (length == 0uL) return@any false
+        memScoped {
+            val name = allocArray<ByteVar>(length.toInt())
+            FPDFImageObj_GetImageFilter(this@hasJpegFilter, filter, name, length)
+            name.toKString() == JPEG_FILTER
+        }
+    }
+
+/** A guard against a malformed stream claiming a size that would exhaust the heap. */
+private const val MAX_IMAGE_BYTES: ULong = 67_108_864uL

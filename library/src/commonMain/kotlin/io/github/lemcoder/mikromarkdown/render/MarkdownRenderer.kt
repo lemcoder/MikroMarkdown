@@ -22,6 +22,9 @@ import io.github.lemcoder.mikromarkdown.model.Table
 import io.github.lemcoder.mikromarkdown.model.TableCell
 import io.github.lemcoder.mikromarkdown.model.Text
 import io.github.lemcoder.mikromarkdown.model.ThematicBreak
+import io.github.lemcoder.mikromarkdown.utils.base64Encode
+import io.github.lemcoder.mikromarkdown.utils.fileName
+import io.github.lemcoder.mikromarkdown.utils.mapImages
 
 public data class MarkdownOptions(
     val bullet: Char = '-',
@@ -40,23 +43,70 @@ public data class MarkdownOptions(
     val imagesAsText: Boolean = false,
     /** Longest image URL kept inline; longer ones (e.g. base64 data URIs) are still emitted. */
     val maxInlineImageUrl: Int = Int.MAX_VALUE,
+    /** What becomes of an image the document carries rather than points at. */
+    val assetPolicy: AssetPolicy = AssetPolicy.AltTextOnly,
 ) {
     public companion object {
         public val Default: MarkdownOptions = MarkdownOptions()
     }
 }
 
+/**
+ * What a renderer does with an image the document carries in [Document.assets].
+ *
+ * An asset has bytes and no address, so Markdown cannot name it without being told where it will live. The three
+ * answers are the three things a caller can actually want, and none of them is right for everyone: a single
+ * self-contained file, a directory of images beside the text, or no images.
+ */
+public sealed interface AssetPolicy {
+    /** A `data:` URI in the document. Self-contained, and large: the bytes grow by a third. */
+    public data object Inline : AssetPolicy
+
+    /**
+     * A relative link under [directory]; the caller writes [Document.assets] there itself.
+     *
+     * The renderer produces text and touches no files, so this emits the links and leaves the bytes to whoever asked
+     * for them.
+     */
+    public data class Reference(val directory: String = "images") : AssetPolicy
+
+    /** No image, only its alt text. What an LLM or a search index wants. */
+    public data object AltTextOnly : AssetPolicy
+}
+
 /** Serializes a [Document] to GitHub-Flavored Markdown. The only place Markdown syntax is produced. */
 public class MarkdownRenderer(private val options: MarkdownOptions = MarkdownOptions.Default) {
 
     public fun render(document: Document): String {
-        val body = renderBlocks(document.blocks)
+        val body = renderBlocks(document.withAssetUrls().blocks)
         if (!options.frontMatter || document.metadata.isEmpty()) return body
         val front = document.metadata.entries.joinToString("\n") { (k, v) -> "$k: ${v.replace("\n", " ")}" }
         return "---\n$front\n---\n\n$body".trimEnd()
     }
 
     public fun render(blocks: List<Block>): String = renderBlocks(blocks)
+
+    /**
+     * Gives every carried image an address, because Markdown can only link to one.
+     *
+     * A pass before rendering rather than a lookup inside it: the renderer holds no state, and [render] for a bare list
+     * of blocks has no document to look assets up in. Afterwards every image is an ordinary URL and the writer below
+     * needs to know nothing about assets.
+     */
+    private fun Document.withAssetUrls(): Document {
+        if (assets.isEmpty()) return this
+        val byId = assets.associateBy { it.id }
+
+        return mapImages { image ->
+            val asset = image.assetId?.let(byId::get) ?: return@mapImages image
+            when (val policy = options.assetPolicy) {
+                AssetPolicy.Inline -> image.copy(url = "data:${asset.mediaType};base64," + base64Encode(asset.bytes))
+                is AssetPolicy.Reference -> image.copy(url = policy.directory.trimEnd('/') + "/" + asset.fileName())
+                // A blank url is what the writer already reads as "alt text only".
+                AssetPolicy.AltTextOnly -> image.copy(url = "")
+            }
+        }
+    }
 
     public fun renderInline(inlines: List<Inline>): String = inlines(inlines, TextContext.INLINE)
 

@@ -4,6 +4,7 @@ import com.fleeksoft.ksoup.Ksoup
 import com.fleeksoft.ksoup.parser.Parser
 import io.github.lemcoder.mikromarkdown.DocumentConverter
 import io.github.lemcoder.mikromarkdown.StreamInfo
+import io.github.lemcoder.mikromarkdown.model.Asset
 import io.github.lemcoder.mikromarkdown.model.Block
 import io.github.lemcoder.mikromarkdown.model.Document
 import io.github.lemcoder.mikromarkdown.model.Paragraph
@@ -11,6 +12,8 @@ import io.github.lemcoder.mikromarkdown.model.Strong
 import io.github.lemcoder.mikromarkdown.model.Text
 import io.github.lemcoder.mikromarkdown.utils.HtmlToDocument
 import io.github.lemcoder.mikromarkdown.utils.ZipArchive
+import io.github.lemcoder.mikromarkdown.utils.mediaTypeForImage
+import io.github.lemcoder.mikromarkdown.utils.withAssets
 
 /**
  * An EPUB is a ZIP of XHTML.
@@ -46,6 +49,7 @@ public class EpubConverter : DocumentConverter {
         val manifest = manifest(packageDocument)
 
         val blocks = mutableListOf<Block>()
+        val assets = mutableListOf<Asset>()
         var title: String? = metadata["title"]
 
         for ((key, label) in metaFields) {
@@ -57,12 +61,26 @@ public class EpubConverter : DocumentConverter {
             val href = manifest[idref] ?: continue
             val path = if (opfDirectory.isEmpty()) href else "$opfDirectory/$href"
             val html = archive.readText(path) ?: archive.readText(path.removePrefix("/")) ?: continue
-            val chapter = HtmlToDocument.parse(html)
+            // An EPUB carries its images, and a chapter points at them with a path relative to
+            // itself. The archive is already open, so resolving one is a lookup rather than a fetch.
+            val chapterDirectory = path.substringBeforeLast('/', "")
+            val chapter =
+                HtmlToDocument.parse(html).withAssets { src ->
+                    val entry = archive.resolve(chapterDirectory, src) ?: return@withAssets null
+                    val data = archive.read(entry) ?: return@withAssets null
+                    Asset(
+                        id = entry,
+                        mediaType = mediaTypeForImage(entry),
+                        bytes = data,
+                        name = entry.substringAfterLast('/'),
+                    )
+                }
             if (title == null) title = chapter.title
             blocks += chapter.blocks
+            assets += chapter.assets
         }
 
-        return Document(blocks = blocks, title = title, metadata = metadata)
+        return Document(blocks = blocks, title = title, metadata = metadata, assets = assets.distinctBy { it.id })
     }
 
     private fun opfPath(container: String): String? =

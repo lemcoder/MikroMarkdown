@@ -3,6 +3,8 @@ package io.github.lemcoder.mikromarkdown.pdf
 import io.github.lemcoder.mikromarkdown.DocumentConverter
 import io.github.lemcoder.mikromarkdown.StreamInfo
 import io.github.lemcoder.mikromarkdown.model.Document
+import io.github.lemcoder.mikromarkdown.model.Image
+import io.github.lemcoder.mikromarkdown.model.Paragraph
 import io.github.lemcoder.mikromarkdown.model.plainTextBlocks
 
 /**
@@ -25,8 +27,18 @@ public class PdfiumConverter : DocumentConverter {
         return info.extension == "pdf" || info.mimetype == "application/pdf"
     }
 
-    override fun parse(bytes: ByteArray, info: StreamInfo): Document =
-        Document(blocks = plainTextBlocks(extractPages(bytes).restored()))
+    override fun parse(bytes: ByteArray, info: StreamInfo): Document {
+        val pages = extractPages(bytes)
+        val images = pages.flatMap { it.images }
+        // The images follow the text rather than sitting where they appear. A page object carries no
+        // reading order, so placing a figure among the paragraphs means reading the content stream
+        // and tracking where each `Do` falls — worth doing, and a good deal more than this.
+        val figures = images.map { Paragraph(listOf(Image(alt = "", url = "", assetId = it.asset.id))) }
+        return Document(
+            blocks = plainTextBlocks(pages.restored()) + figures,
+            assets = images.map { it.asset },
+        )
+    }
 }
 
 /** Every page, in order; [PageText] carries the text and the wraps pdfium collapsed. */
