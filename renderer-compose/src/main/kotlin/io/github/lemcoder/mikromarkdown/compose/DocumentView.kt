@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -15,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -25,14 +25,18 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment as LayoutAlignment
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import io.github.lemcoder.mikromarkdown.model.Alignment as CellAlignment
 import io.github.lemcoder.mikromarkdown.model.Block
@@ -57,30 +61,44 @@ import io.github.lemcoder.mikromarkdown.model.ThematicBreak
  * `when` without an `else` is what keeps that true as the model grows.
  */
 @Composable
-public fun DocumentView(
-    document: Document,
-    modifier: Modifier = Modifier,
-    contentPadding: PaddingValues = PaddingValues(16.dp),
-) {
-    LazyColumn(
-        modifier = modifier,
-        contentPadding = contentPadding,
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        document.title?.let { title -> item { Text(title, style = MaterialTheme.typography.headlineMedium) } }
-        items(document.blocks) { block -> BlockView(block, document) }
+public fun DocumentView(document: Document, modifier: Modifier = Modifier, style: ReaderStyle = ReaderStyle.Default) {
+    CompositionLocalProvider(LocalReaderStyle provides style) {
+        val background = style.colors.background
+        LazyColumn(
+            modifier = if (background == Color.Unspecified) modifier else modifier.background(background),
+            contentPadding = style.contentPadding,
+            verticalArrangement = Arrangement.spacedBy(style.blockSpacing),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            document.title?.let { title ->
+                item { Text(title, Modifier.readerWidth(), style = MaterialTheme.typography.headlineMedium.scaled()) }
+            }
+            items(document.blocks) { block -> BlockView(block, document, Modifier.readerWidth()) }
+        }
     }
+}
+
+/** Keeps a line from running the width of a tablet, where it is hard to find the way back. */
+@Composable
+private fun Modifier.readerWidth(): Modifier {
+    val max = LocalReaderStyle.current.maxContentWidth
+    return if (max == Dp.Unspecified) fillMaxWidth() else fillMaxWidth().widthIn(max = max)
 }
 
 /** One block. Nested blocks — quotes, list items — come back through here. */
 @Composable
 internal fun BlockView(block: Block, document: Document, modifier: Modifier = Modifier) {
     when (block) {
-        is Heading -> Text(block.content.annotated(document), modifier, style = block.level.headingStyle())
+        is Heading -> Text(block.content.annotated(document), modifier, style = block.level.headingStyle().scaled())
         // A paragraph that is only an image is a figure, and a figure is drawn rather than described.
         is Paragraph ->
             when (val figure = block.soleImage()) {
-                null -> Text(block.content.annotated(document), modifier, style = MaterialTheme.typography.bodyLarge)
+                null ->
+                    Text(
+                        block.content.annotated(document),
+                        modifier,
+                        style = MaterialTheme.typography.bodyLarge.scaled(body = true),
+                    )
                 else -> ImageView(figure, document, modifier)
             }
         is CodeBlock -> CodeBlockView(block, modifier)
@@ -90,7 +108,7 @@ internal fun BlockView(block: Block, document: Document, modifier: Modifier = Mo
         ThematicBreak -> HorizontalDivider(modifier.padding(vertical = 8.dp))
         // Already-rendered Markdown or HTML: the model's escape hatch, and there is nothing to lay
         // out but the text itself.
-        is RawBlock -> Text(block.text, modifier, style = MaterialTheme.typography.bodySmall)
+        is RawBlock -> Text(block.text, modifier, style = MaterialTheme.typography.bodySmall.scaled())
     }
 }
 
@@ -108,7 +126,7 @@ private fun Paragraph.soleImage(): ModelImage? = content.singleOrNull() as? Mode
 private fun ImageView(image: ModelImage, document: Document, modifier: Modifier) {
     val bitmap = rememberAssetBitmap(image.assetId, document)
     if (bitmap == null) {
-        Text(image.alt.ifBlank { image.url }, modifier, style = MaterialTheme.typography.bodyMedium)
+        Text(image.alt.ifBlank { image.url }, modifier, style = MaterialTheme.typography.bodyMedium.scaled())
         return
     }
     // Never enlarge. A figure wider than the screen is scaled down to fit; an icon keeps its own
@@ -138,14 +156,14 @@ private fun rememberAssetBitmap(assetId: String?, document: Document): ImageBitm
 private fun CodeBlockView(block: CodeBlock, modifier: Modifier) {
     Surface(
         modifier = modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surfaceVariant,
+        color = readerCodeBackground(),
         shape = RoundedCornerShape(4.dp),
     ) {
         // A code block sets its own line breaks, so it scrolls sideways rather than wrapping.
         Text(
             text = block.code,
             modifier = Modifier.horizontalScroll(rememberScrollState()).padding(12.dp),
-            style = MaterialTheme.typography.bodyMedium.copy(fontFamily = Monospace),
+            style = MaterialTheme.typography.bodyMedium.scaled().copy(fontFamily = Monospace),
             softWrap = false,
         )
     }
@@ -156,7 +174,7 @@ private fun BlockQuoteView(block: BlockQuote, document: Document, modifier: Modi
     // IntrinsicSize.Min gives the row the height of its content, which is what lets the rule beside
     // the quote run the full height of it rather than collapsing to nothing.
     Row(modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
-        Box(Modifier.width(3.dp).fillMaxHeight().background(MaterialTheme.colorScheme.outlineVariant))
+        Box(Modifier.width(3.dp).fillMaxHeight().background(readerQuoteRule()))
         Column(
             modifier = Modifier.padding(start = 12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -183,7 +201,7 @@ private fun ListItemView(item: ListItem, marker: String, document: Document) {
         Text(
             text = marker,
             modifier = Modifier.width(28.dp),
-            style = MaterialTheme.typography.bodyLarge,
+            style = MaterialTheme.typography.bodyLarge.scaled(),
             textAlign = TextAlign.End,
         )
         Column(
@@ -226,7 +244,7 @@ private fun TableView(table: Table, document: Document, modifier: Modifier) {
             Text(
                 text = table.caption.annotated(document),
                 modifier = Modifier.padding(top = 4.dp),
-                style = MaterialTheme.typography.bodySmall,
+                style = MaterialTheme.typography.bodySmall.scaled(),
             )
         }
     }

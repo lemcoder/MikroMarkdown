@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -26,6 +27,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -71,6 +73,8 @@ private fun ReaderScreen(opened: Uri? = null) {
     // PdfiumConverter is not in the factory's list — PDF costs a native library, so a caller opts in.
     val mikroMarkdown = remember { MikroMarkdown().apply { register(PdfiumConverter()) } }
     var state: ReaderState by remember { mutableStateOf(ReaderState.Empty) }
+    var settings by rememberSaveable(stateSaver = ReaderSettingsSaver) { mutableStateOf(ReaderSettings()) }
+    var settingsOpen by remember { mutableStateOf(false) }
 
     fun load(uri: Uri) {
         val name = context.displayName(uri)
@@ -110,7 +114,10 @@ private fun ReaderScreen(opened: Uri? = null) {
         topBar = {
             TopAppBar(
                 title = { Text((state as? ReaderState.Loaded)?.name ?: "MikroMarkdown") },
-                actions = { Button(onClick = { picker.launch(arrayOf("*/*")) }) { Text("Open") } },
+                actions = {
+                    IconButton(onClick = { settingsOpen = true }) { Text("Aa") }
+                    Button(onClick = { picker.launch(arrayOf("*/*")) }) { Text("Open") }
+                },
             )
         }
     ) { padding ->
@@ -118,10 +125,14 @@ private fun ReaderScreen(opened: Uri? = null) {
             when (val current = state) {
                 ReaderState.Empty -> Hint("Open a document to read it.")
                 ReaderState.Loading -> CircularProgressIndicator()
-                is ReaderState.Loaded -> DocumentView(current.document, Modifier.fillMaxSize())
+                is ReaderState.Loaded -> DocumentView(current.document, Modifier.fillMaxSize(), settings.style())
                 is ReaderState.Failed -> Failure(current)
             }
         }
+    }
+
+    if (settingsOpen) {
+        ReaderSettingsSheet(settings, onChange = { settings = it }, onDismiss = { settingsOpen = false })
     }
 }
 

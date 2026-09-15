@@ -39,8 +39,8 @@ internal val Monospace = FontFamily.Monospace
 @Composable
 @ReadOnlyComposable
 internal fun List<Inline>.annotated(document: Document): AnnotatedString {
-    val linkStyle = SpanStyle(color = MaterialTheme.colorScheme.primary, textDecoration = TextDecoration.Underline)
-    val codeBackground = MaterialTheme.colorScheme.surfaceVariant
+    val linkStyle = SpanStyle(color = readerLinkColor(), textDecoration = TextDecoration.Underline)
+    val codeBackground = readerCodeBackground()
     return buildAnnotatedString { appendInlines(this@annotated, document, linkStyle, codeBackground) }
 }
 
