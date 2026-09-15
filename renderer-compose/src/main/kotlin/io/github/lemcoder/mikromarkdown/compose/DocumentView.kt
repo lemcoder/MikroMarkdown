@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -30,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import io.github.lemcoder.mikromarkdown.model.Alignment as CellAlignment
@@ -109,11 +111,13 @@ private fun ImageView(image: ModelImage, document: Document, modifier: Modifier)
         Text(image.alt.ifBlank { image.url }, modifier, style = MaterialTheme.typography.bodyMedium)
         return
     }
+    // Never enlarge. A figure wider than the screen is scaled down to fit; an icon keeps its own
+    // size, because blowing a 100px tick up to the full width of a phone is not what the page meant.
     androidx.compose.foundation.Image(
         bitmap = bitmap,
         contentDescription = image.alt.ifBlank { null },
-        modifier = modifier.fillMaxWidth(),
-        contentScale = ContentScale.FillWidth,
+        modifier = modifier.sizeIn(maxWidth = with(LocalDensity.current) { bitmap.width.toDp() }).fillMaxWidth(),
+        contentScale = ContentScale.Fit,
     )
 }
 

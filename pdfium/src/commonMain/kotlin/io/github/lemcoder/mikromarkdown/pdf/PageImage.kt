@@ -3,8 +3,13 @@ package io.github.lemcoder.mikromarkdown.pdf
 import io.github.lemcoder.mikromarkdown.model.Asset
 import io.github.lemcoder.mikromarkdown.model.PngEncoder
 
-/** One image found on a page, already in a form something can display. */
-internal class PageImage(val asset: Asset, val width: Int, val height: Int)
+/**
+ * One image found on a page, already in a form something can display.
+ *
+ * [top] is the upper edge of its box in page coordinates, where y grows upward, and is what decides where the figure
+ * sits among the paragraphs.
+ */
+internal class PageImage(val asset: Asset, val width: Int, val height: Int, val top: Float = Float.MAX_VALUE)
 
 /**
  * An image pdfium found on a page, turned into a file.
@@ -23,16 +28,17 @@ internal fun imageAsset(
     height: Int,
     jpeg: ByteArray?,
     id: String,
+    top: Float = Float.MAX_VALUE,
 ): PageImage? {
     if (width <= 0 || height <= 0) return null
 
     if (jpeg != null && jpeg.isNotEmpty()) {
-        return PageImage(Asset(id = id, mediaType = "image/jpeg", bytes = jpeg, name = "$id.jpg"), width, height)
+        return PageImage(Asset(id, "image/jpeg", jpeg, "$id.jpg"), width, height, top)
     }
 
     val rgba = pixels.asRgba(width, height) ?: return null
     val png = PngEncoder.encode(width, height, rgba) ?: return null
-    return PageImage(Asset(id = id, mediaType = "image/png", bytes = png, name = "$id.png"), width, height)
+    return PageImage(Asset(id, "image/png", png, "$id.png"), width, height, top)
 }
 
 /**
@@ -78,8 +84,20 @@ private fun ByteArray.cmykToRgba(pixelCount: Int): ByteArray {
 
 private const val OPAQUE = 0xFF.toByte()
 
-/** pdfium's object types; only images matter here. */
+/** pdfium's object types; only images matter, and forms because images hide inside them. */
 internal const val OBJECT_TYPE_IMAGE: Int = 3
+
+/**
+ * A form XObject: a nested content stream, and where a figure's raster usually lives.
+ *
+ * A page rarely draws an image directly. Anything placed by a figure environment — matplotlib, TikZ, an embedded PDF —
+ * arrives as a form wrapping its own objects, so a walk that only reads the page's top level sees almost nothing. One
+ * paper measured 229 images nested in forms against 1 at the top.
+ */
+internal const val OBJECT_TYPE_FORM: Int = 5
+
+/** Forms nest; this stops a malformed file from recursing forever. */
+internal const val MAX_FORM_DEPTH: Int = 8
 
 /** The filter a JPEG stream carries, and the one case where the stream is already a file. */
 internal const val JPEG_FILTER: String = "DCTDecode"

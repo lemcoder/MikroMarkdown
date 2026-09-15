@@ -3,6 +3,7 @@ package io.github.lemcoder.mikromarkdown.pdf
 import kotlinx.cinterop.ByteVar
 import kotlinx.cinterop.DoubleVar
 import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.FloatVar
 import kotlinx.cinterop.UIntVar
 import kotlinx.cinterop.UShortVar
 import kotlinx.cinterop.addressOf
@@ -15,11 +16,14 @@ import kotlinx.cinterop.readBytes
 import kotlinx.cinterop.toKString
 import kotlinx.cinterop.usePinned
 import kotlinx.cinterop.value
+import pdfium.FPDFFormObj_CountObjects
+import pdfium.FPDFFormObj_GetObject
 import pdfium.FPDFImageObj_GetImageDataDecoded
 import pdfium.FPDFImageObj_GetImageDataRaw
 import pdfium.FPDFImageObj_GetImageFilter
 import pdfium.FPDFImageObj_GetImageFilterCount
 import pdfium.FPDFImageObj_GetImagePixelSize
+import pdfium.FPDFPageObj_GetBounds
 import pdfium.FPDFPageObj_GetType
 import pdfium.FPDFPage_CountObjects
 import pdfium.FPDFPage_GetObject
@@ -63,7 +67,7 @@ internal actual fun extractPages(bytes: ByteArray): List<PageText> {
                 val page = FPDF_LoadPage(document, index) ?: continue
                 val textPage = FPDFText_LoadPage(page)
                 if (textPage != null) {
-                    pages += pageText(textPage).copyWith(pageImages(page, index))
+                    pages += pageText(textPage).copyWith(pageImages(page, index), charTops(textPage))
                     FPDFText_ClosePage(textPage)
                 }
                 FPDF_ClosePage(page)
@@ -133,31 +137,83 @@ private fun startsLowerLine(textPage: pdfium.FPDF_TEXTPAGE, index: Int): Boolean
 @OptIn(ExperimentalForeignApi::class)
 private fun pageImages(page: pdfium.FPDF_PAGE, pageIndex: Int): List<PageImage> {
     val out = mutableListOf<PageImage>()
-    for (index in 0 until FPDFPage_CountObjects(page)) {
-        val obj = FPDFPage_GetObject(page, index) ?: continue
-        if (FPDFPageObj_GetType(obj) != OBJECT_TYPE_IMAGE) continue
-
-        val size =
-            memScoped {
-                val width = alloc<UIntVar>()
-                val height = alloc<UIntVar>()
-                if (FPDFImageObj_GetImagePixelSize(obj, width.ptr, height.ptr) == 0) null
-                else width.value.toInt() to height.value.toInt()
-            } ?: continue
-
-        val jpeg = if (obj.hasJpegFilter()) obj.readInto(::FPDFImageObj_GetImageDataRaw) else null
-        val pixels = if (jpeg == null) obj.readInto(::FPDFImageObj_GetImageDataDecoded) else null
-
-        imageAsset(
-                pixels = pixels ?: ByteArray(0),
-                width = size.first,
-                height = size.second,
-                jpeg = jpeg,
-                id = "page${pageIndex + 1}-image${index + 1}",
-            )
-            ?.let { out += it }
-    }
+    collectImages(
+        FPDFPage_CountObjects(page),
+        { FPDFPage_GetObject(page, it) },
+        "page${pageIndex + 1}",
+        out,
+        0,
+    )
     return out
+}
+
+/** Walks a container's objects, descending into forms, collecting whatever is an image. */
+@OptIn(ExperimentalForeignApi::class)
+private fun collectImages(
+    count: Int,
+    objectAt: (Int) -> pdfium.FPDF_PAGEOBJECT?,
+    path: String,
+    out: MutableList<PageImage>,
+    depth: Int,
+) {
+    for (index in 0 until count) {
+        val obj = objectAt(index) ?: continue
+        when (FPDFPageObj_GetType(obj)) {
+            OBJECT_TYPE_IMAGE -> obj.asImage("$path-image${index + 1}")?.let { out += it }
+            OBJECT_TYPE_FORM ->
+                if (depth < MAX_FORM_DEPTH) {
+                    collectImages(
+                        FPDFFormObj_CountObjects(obj),
+                        { FPDFFormObj_GetObject(obj, it.toULong()) },
+                        "$path-form${index + 1}",
+                        out,
+                        depth + 1,
+                    )
+                }
+        }
+    }
+}
+
+@OptIn(ExperimentalForeignApi::class)
+private fun pdfium.FPDF_PAGEOBJECT.asImage(id: String): PageImage? {
+    val size =
+        memScoped {
+            val width = alloc<UIntVar>()
+            val height = alloc<UIntVar>()
+            if (FPDFImageObj_GetImagePixelSize(this@asImage, width.ptr, height.ptr) == 0) null
+            else width.value.toInt() to height.value.toInt()
+        } ?: return null
+
+    val jpeg = if (hasJpegFilter()) readInto(::FPDFImageObj_GetImageDataRaw) else null
+    val pixels = if (jpeg == null) readInto(::FPDFImageObj_GetImageDataDecoded) else null
+    return imageAsset(pixels ?: ByteArray(0), size.first, size.second, jpeg, id, top())
+}
+
+/** The upper edge of the object's box, in page coordinates. */
+@OptIn(ExperimentalForeignApi::class)
+private fun pdfium.FPDF_PAGEOBJECT.top(): Float = memScoped {
+    val left = alloc<FloatVar>()
+    val bottom = alloc<FloatVar>()
+    val right = alloc<FloatVar>()
+    val top = alloc<FloatVar>()
+    if (FPDFPageObj_GetBounds(this@top, left.ptr, bottom.ptr, right.ptr, top.ptr) == 0) Float.MAX_VALUE else top.value
+}
+
+/** Every character's upper edge, read once for the page. */
+@OptIn(ExperimentalForeignApi::class)
+private fun charTops(textPage: pdfium.FPDF_TEXTPAGE): FloatArray = memScoped {
+    val count = FPDFText_CountChars(textPage)
+    val tops = FloatArray(count)
+    val left = alloc<DoubleVar>()
+    val right = alloc<DoubleVar>()
+    val bottom = alloc<DoubleVar>()
+    val top = alloc<DoubleVar>()
+    for (index in 0 until count) {
+        tops[index] =
+            if (FPDFText_GetCharBox(textPage, index, left.ptr, right.ptr, bottom.ptr, top.ptr) == 0) Float.MAX_VALUE
+            else top.value.toFloat()
+    }
+    tops
 }
 
 /** pdfium's two-call buffer protocol: ask for the length, allocate, ask again. */

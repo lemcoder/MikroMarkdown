@@ -2,6 +2,7 @@ package io.github.lemcoder.mikromarkdown.pdf
 
 import io.github.lemcoder.mikromarkdown.DocumentConverter
 import io.github.lemcoder.mikromarkdown.StreamInfo
+import io.github.lemcoder.mikromarkdown.model.Block
 import io.github.lemcoder.mikromarkdown.model.Document
 import io.github.lemcoder.mikromarkdown.model.Image
 import io.github.lemcoder.mikromarkdown.model.Paragraph
@@ -29,17 +30,32 @@ public class PdfiumConverter : DocumentConverter {
 
     override fun parse(bytes: ByteArray, info: StreamInfo): Document {
         val pages = extractPages(bytes)
-        val images = pages.flatMap { it.images }
-        // The images follow the text rather than sitting where they appear. A page object carries no
-        // reading order, so placing a figure among the paragraphs means reading the content stream
-        // and tracking where each `Do` falls — worth doing, and a good deal more than this.
-        val figures = images.map { Paragraph(listOf(Image(alt = "", url = "", assetId = it.asset.id))) }
-        return Document(
-            blocks = plainTextBlocks(pages.restored()) + figures,
-            assets = images.map { it.asset },
-        )
+        return Document(blocks = pages.blocks(), assets = pages.flatMap { page -> page.images.map { it.asset } })
     }
 }
 
-/** Every page, in order; [PageText] carries the text and the wraps pdfium collapsed. */
+/**
+ * The document's blocks, with each figure among the paragraphs it was printed between.
+ *
+ * A page is cut at the character its figures sit above, so the text is built in the pieces the figures divide it into
+ * rather than as one run with the pictures swept to the end. Splitting the text does cost the joining across a cut — a
+ * paragraph interrupted by a figure becomes two — which is what the page looks like anyway.
+ */
+private fun List<PageText>.blocks(): List<Block> {
+    val hyphen = hyphenWritten()
+    return flatMap { page ->
+        buildList {
+            var cursor = 0
+            for (image in page.images.sortedBy { page.placementOf(it) }) {
+                val cut = page.placementOf(image).coerceIn(cursor, page.text.length)
+                addAll(plainTextBlocks(page.restored(hyphen, cursor, cut)))
+                add(Paragraph(listOf(Image(alt = "", url = "", assetId = image.asset.id))))
+                cursor = cut
+            }
+            addAll(plainTextBlocks(page.restored(hyphen, cursor, page.text.length)))
+        }
+    }
+}
+
+/** Every page, in order; [PageText] carries the text, the wraps pdfium collapsed, and the figures. */
 internal expect fun extractPages(bytes: ByteArray): List<PageText>

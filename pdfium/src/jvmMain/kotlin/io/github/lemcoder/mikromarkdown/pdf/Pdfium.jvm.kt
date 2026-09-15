@@ -1,11 +1,14 @@
 package io.github.lemcoder.mikromarkdown.pdf
 
 import java.io.File
+import pdfium.FPDFFormObj_CountObjects
+import pdfium.FPDFFormObj_GetObject
 import pdfium.FPDFImageObj_GetImageDataDecoded
 import pdfium.FPDFImageObj_GetImageDataRaw
 import pdfium.FPDFImageObj_GetImageFilter
 import pdfium.FPDFImageObj_GetImageFilterCount
 import pdfium.FPDFImageObj_GetImagePixelSize
+import pdfium.FPDFPageObj_GetBounds
 import pdfium.FPDFPageObj_GetType
 import pdfium.FPDFPage_CountObjects
 import pdfium.FPDFPage_GetObject
@@ -60,7 +63,7 @@ internal actual fun extractPages(bytes: ByteArray): List<PageText> {
                 if (page == 0L) continue
                 val textPage = FPDFText_LoadPage(page)
                 if (textPage != 0L) {
-                    pages += pageText(textPage).copyWith(pageImages(page, index))
+                    pages += pageText(textPage).copyWith(pageImages(page, index), charTops(textPage))
                     FPDFText_ClosePage(textPage)
                 }
                 FPDF_ClosePage(page)
@@ -127,28 +130,76 @@ private fun startsLowerLine(textPage: Long, index: Int): Boolean {
  */
 private fun pageImages(page: Long, pageIndex: Int): List<PageImage> {
     val out = mutableListOf<PageImage>()
-    for (index in 0 until FPDFPage_CountObjects(page)) {
-        val obj = FPDFPage_GetObject(page, index)
-        if (obj == 0L || FPDFPageObj_GetType(obj) != OBJECT_TYPE_IMAGE) continue
-
-        val width = IntArray(1)
-        val height = IntArray(1)
-        if (FPDFImageObj_GetImagePixelSize(obj, width, height) == 0) continue
-
-        // A JPEG stream is already a file; anything else is pixels that need a container.
-        val jpeg = if (obj.hasJpegFilter()) obj.readInto(::FPDFImageObj_GetImageDataRaw) else null
-        val pixels = if (jpeg == null) obj.readInto(::FPDFImageObj_GetImageDataDecoded) else null
-
-        imageAsset(
-                pixels = pixels ?: ByteArray(0),
-                width = width[0],
-                height = height[0],
-                jpeg = jpeg,
-                id = "page${pageIndex + 1}-image${index + 1}",
-            )
-            ?.let { out += it }
-    }
+    collectImages(FPDFPage_CountObjects(page), { FPDFPage_GetObject(page, it) }, "page${pageIndex + 1}", out, 0)
     return out
+}
+
+/** Walks a container's objects, descending into forms, collecting whatever is an image. */
+private fun collectImages(
+    count: Int,
+    objectAt: (Int) -> Long,
+    path: String,
+    out: MutableList<PageImage>,
+    depth: Int,
+) {
+    for (index in 0 until count) {
+        val obj = objectAt(index)
+        if (obj == 0L) continue
+        when (FPDFPageObj_GetType(obj)) {
+            OBJECT_TYPE_IMAGE -> obj.asImage("$path-image${index + 1}")?.let { out += it }
+            OBJECT_TYPE_FORM ->
+                if (depth < MAX_FORM_DEPTH) {
+                    collectImages(
+                        FPDFFormObj_CountObjects(obj),
+                        { FPDFFormObj_GetObject(obj, it.toLong()) },
+                        "$path-form${index + 1}",
+                        out,
+                        depth + 1,
+                    )
+                }
+        }
+    }
+}
+
+private fun Long.asImage(id: String): PageImage? {
+    val width = IntArray(1)
+    val height = IntArray(1)
+    if (FPDFImageObj_GetImagePixelSize(this, width, height) == 0) return null
+
+    // A JPEG stream is already a file; anything else is pixels that need a container.
+    val jpeg = if (hasJpegFilter()) readInto(::FPDFImageObj_GetImageDataRaw) else null
+    val pixels = if (jpeg == null) readInto(::FPDFImageObj_GetImageDataDecoded) else null
+    return imageAsset(pixels ?: ByteArray(0), width[0], height[0], jpeg, id, top())
+}
+
+/** The upper edge of the object's box, in page coordinates. */
+private fun Long.top(): Float {
+    val left = FloatArray(1)
+    val bottom = FloatArray(1)
+    val right = FloatArray(1)
+    val top = FloatArray(1)
+    return if (FPDFPageObj_GetBounds(this, left, bottom, right, top) == 0) Float.MAX_VALUE else top[0]
+}
+
+/**
+ * Every character's upper edge, read once for the page.
+ *
+ * Asking per figure would be the same call repeated for each of them; a paper's page can carry thirty images over two
+ * thousand characters.
+ */
+private fun charTops(textPage: Long): FloatArray {
+    val count = FPDFText_CountChars(textPage)
+    val tops = FloatArray(count)
+    val left = DoubleArray(1)
+    val right = DoubleArray(1)
+    val bottom = DoubleArray(1)
+    val top = DoubleArray(1)
+    for (index in 0 until count) {
+        tops[index] =
+            if (FPDFText_GetCharBox(textPage, index, left, right, bottom, top) == 0) Float.MAX_VALUE
+            else top[0].toFloat()
+    }
+    return tops
 }
 
 /** pdfium's two-call buffer protocol: ask for the length, allocate, ask again. */

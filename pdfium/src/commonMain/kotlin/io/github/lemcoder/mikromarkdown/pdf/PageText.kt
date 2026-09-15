@@ -10,9 +10,30 @@ package io.github.lemcoder.mikromarkdown.pdf
  * [hyphenWraps] are the marker positions that `FPDFText_GetCharBox` confirms: the character after the marker really
  * does begin a lower line. That is the one thing the geometry answers outright, and it is what [restored] needs.
  */
-internal class PageText(val text: String, val hyphenWraps: IntArray, val images: List<PageImage> = emptyList()) {
+internal class PageText(
+    val text: String,
+    val hyphenWraps: IntArray,
+    val images: List<PageImage> = emptyList(),
+    /** The upper edge of each character's box, in page coordinates, parallel to [text]. */
+    val charTops: FloatArray = FloatArray(0),
+) {
     /** The text side and the image side are read separately; this joins them. */
-    fun copyWith(images: List<PageImage>): PageText = PageText(text, hyphenWraps, images)
+    fun copyWith(images: List<PageImage>, charTops: FloatArray): PageText =
+        PageText(text, hyphenWraps, images, charTops)
+
+    /**
+     * Where a figure belongs in the page's text.
+     *
+     * A page object carries no reading order, so position on the page stands in for it: the figure goes before the
+     * first character that sits below its top edge, which is where a reader coming down the page would meet it.
+     * Single-column text is what this gets right; two columns interleave by height and would need the column boundary
+     * first.
+     */
+    fun placementOf(image: PageImage): Int {
+        if (charTops.isEmpty()) return text.length
+        val index = charTops.indexOfFirst { it < image.top }
+        return if (index < 0) text.length else index
+    }
 }
 
 /** pdfium's stand-in for a hyphen it removed at a line break. */
@@ -30,18 +51,29 @@ internal const val HYPHEN_MARKER: Char = '\uFFFE'
  */
 internal fun List<PageText>.restored(): String {
     val hyphen = hyphenWritten()
-    return joinToString("\n") { it.restored(hyphen) }
+    return joinToString("\n") { it.restored(hyphen, 0, it.text.length) }
 }
 
-private fun PageText.restored(hyphen: Char): String {
-    if (HYPHEN_MARKER !in text) return text
+/** The chosen hyphen for the whole document, so one page's wraps do not disagree with another's. */
+internal fun List<PageText>.hyphenWritten(): Char = hyphenWrittenIn(this)
+
+/**
+ * A slice of the page, with its wraps put back.
+ *
+ * The slice is taken before restoring rather than after, so a cut lands on a character of the page's own text and the
+ * wrap indices need no remapping.
+ */
+internal fun PageText.restored(hyphen: Char, from: Int, to: Int): String {
+    if (from >= to) return ""
+    val slice = text.substring(from, to)
+    if (HYPHEN_MARKER !in slice) return slice
 
     val wraps = hyphenWraps.toHashSet()
-    return buildString(text.length + hyphenWraps.size) {
-        for ((index, char) in text.withIndex()) {
+    return buildString(slice.length + hyphenWraps.size) {
+        for ((offset, char) in slice.withIndex()) {
             when {
                 char != HYPHEN_MARKER -> append(char)
-                index in wraps -> append(hyphen).append('\n')
+                (from + offset) in wraps -> append(hyphen).append('\n')
             }
         }
     }
@@ -54,9 +86,9 @@ private fun PageText.restored(hyphen: Char): String {
  * answer, `FPDFTextObj_GetText`, needs a header we do not bind. So the document is asked instead: whichever hyphen it
  * uses in the compounds it did not break is the one to put back, rather than U+002D on a page set in U+2010.
  */
-private fun List<PageText>.hyphenWritten(): Char {
+private fun hyphenWrittenIn(pages: List<PageText>): Char {
     val counts = mutableMapOf<Char, Int>()
-    for (page in this) {
+    for (page in pages) {
         for (match in WRITTEN_HYPHEN.findAll(page.text)) {
             val hyphen = match.value[1]
             counts[hyphen] = (counts[hyphen] ?: 0) + 1
