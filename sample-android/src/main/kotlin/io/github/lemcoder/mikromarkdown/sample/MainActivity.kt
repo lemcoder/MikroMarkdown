@@ -1,5 +1,6 @@
 package io.github.lemcoder.mikromarkdown.sample
 
+import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
@@ -20,6 +21,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -35,6 +37,7 @@ import io.github.lemcoder.mikromarkdown.StreamInfo
 import io.github.lemcoder.mikromarkdown.compose.DocumentView
 import io.github.lemcoder.mikromarkdown.model.Document
 import io.github.lemcoder.mikromarkdown.pdf.PdfiumConverter
+import java.io.IOException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -42,7 +45,9 @@ import kotlinx.coroutines.withContext
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { MaterialTheme { ReaderScreen() } }
+        // Launched with a document from elsewhere, or launched empty and waiting for the picker.
+        val opened = if (intent?.action == Intent.ACTION_VIEW) intent.data else null
+        setContent { MaterialTheme { ReaderScreen(opened) } }
     }
 }
 
@@ -59,7 +64,7 @@ private sealed interface ReaderState {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ReaderScreen() {
+private fun ReaderScreen(opened: Uri? = null) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     // One instance: registering the converters is the expensive part, and it is the same every time.
@@ -67,30 +72,39 @@ private fun ReaderScreen() {
     val mikroMarkdown = remember { MikroMarkdown().apply { register(PdfiumConverter()) } }
     var state: ReaderState by remember { mutableStateOf(ReaderState.Empty) }
 
-    val picker =
-        rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
-            if (uri == null) return@rememberLauncherForActivityResult
-            val name = context.displayName(uri)
-            state = ReaderState.Loading
-            scope.launch {
-                state =
-                    // Reading and converting are both blocking, and a large document is not quick.
-                    withContext(Dispatchers.IO) {
-                        try {
-                            val bytes =
-                                context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                                    ?: return@withContext ReaderState.Failed(name, "Could not open the file")
-                            val info =
-                                StreamInfo(extension = name.substringAfterLast('.', "").lowercase(), filename = name)
-                            ReaderState.Loaded(name, mikroMarkdown.parse(bytes, info))
-                        } catch (e: MikroMarkdownException) {
-                            // The library's own failures say something useful; anything else is a bug
-                            // here and is left to crash.
-                            ReaderState.Failed(name, e.message ?: e::class.simpleName.orEmpty())
-                        }
+    fun load(uri: Uri) {
+        val name = context.displayName(uri)
+        state = ReaderState.Loading
+        scope.launch {
+            state =
+                // Reading and converting are both blocking, and a large document is not quick.
+                withContext(Dispatchers.IO) {
+                    try {
+                        val bytes =
+                            context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                                ?: return@withContext ReaderState.Failed(name, "Could not open the file")
+                        val info = StreamInfo(extension = name.substringAfterLast('.', "").lowercase(), filename = name)
+                        ReaderState.Loaded(name, mikroMarkdown.parse(bytes, info))
+                    } catch (e: MikroMarkdownException) {
+                        // An unsupported format, or a converter that failed on the content.
+                        ReaderState.Failed(name, e.message ?: e::class.simpleName.orEmpty())
+                    } catch (e: IOException) {
+                        ReaderState.Failed(name, "Could not read the file: ${e.message}")
+                    } catch (e: SecurityException) {
+                        // A URI from another app that was never granted, or whose grant expired
+                        // with the task that carried it. Nothing here can recover it, and dying
+                        // is not the answer either.
+                        ReaderState.Failed(name, "No permission to read this document")
                     }
-            }
+                }
         }
+    }
+
+    val picker =
+        rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? -> uri?.let { load(it) } }
+
+    // An intent brings its own document; the picker's callback and this take the same path.
+    LaunchedEffect(opened) { opened?.let { load(it) } }
 
     Scaffold(
         topBar = {
@@ -130,6 +144,10 @@ private fun Failure(state: ReaderState.Failed) {
 
 /** The name the picker shows, which is also where the extension the converters select on comes from. */
 private fun android.content.Context.displayName(uri: Uri): String =
-    contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
-        if (cursor.moveToFirst()) cursor.getString(0) else null
+    try {
+        contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+            if (cursor.moveToFirst()) cursor.getString(0) else null
+        }
+    } catch (_: SecurityException) {
+        null
     } ?: uri.lastPathSegment.orEmpty()

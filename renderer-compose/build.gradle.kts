@@ -12,7 +12,10 @@ plugins {
 android {
     namespace = "io.github.lemcoder.mikromarkdown.compose"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
-    defaultConfig { minSdk = libs.versions.android.minSdk.get().toInt() }
+    defaultConfig {
+        minSdk = libs.versions.android.minSdk.get().toInt()
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
     buildFeatures { compose = true }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
@@ -27,4 +30,12 @@ dependencies {
     implementation(libs.compose.foundation)
     implementation(libs.compose.material3)
     implementation(libs.compose.ui)
+
+    // The renderer draws; asserting that it drew the right thing needs a device.
+    androidTestImplementation(platform(libs.compose.bom))
+    androidTestImplementation(libs.compose.ui.test.junit4)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.junit4)
+    androidTestImplementation(libs.kotlin.test)
+    debugImplementation(libs.compose.ui.test.manifest)
 }
