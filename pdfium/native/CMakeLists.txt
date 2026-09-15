@@ -20,9 +20,14 @@ endif()
 find_package(PDFium REQUIRED)
 
 file(GLOB JNI_SOURCES "${KONAN_JNI_STUB_DIR}/*.c")
+
+# Hand-written alongside the generated bridges, for the calls the generator cannot express: anything
+# taking or returning a raw pixel buffer. See masks.c.
+list(APPEND JNI_SOURCES "${CMAKE_CURRENT_LIST_DIR}/masks.c")
+
 add_library(pdfium-jni SHARED ${JNI_SOURCES})
 set_target_properties(pdfium-jni PROPERTIES OUTPUT_NAME "${KONAN_JNI_LIB_NAME}")
-target_include_directories(pdfium-jni PRIVATE ${KONAN_JNI_INCLUDE_DIRS})
+target_include_directories(pdfium-jni PRIVATE ${KONAN_JNI_INCLUDE_DIRS} "${PDFium_DIR}/include")
 
 # Linking through CMake rather than konan's linker is the point: pdfium is C++, and its runtime
 # comes along correctly this way.

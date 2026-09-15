@@ -42,6 +42,20 @@ internal fun imageAsset(
 }
 
 /**
+ * An image pdfium has already composited with its mask: RGBA, packed, ready to encode.
+ *
+ * Always PNG. The alpha is the whole point of taking this path, and JPEG has none.
+ */
+internal fun maskedImageAsset(rgba: ByteArray, width: Int, height: Int, id: String, top: Float): PageImage? {
+    if (width <= 0 || height <= 0 || rgba.size != width * height * 4) return null
+    // Compositing is rasterised at the size the page shows, not the size the image is stored at, so
+    // it costs resolution on a photograph placed small. Worth it only where there is a mask to apply.
+    if (!rgba.hasTransparency()) return null
+    val png = PngEncoder.encode(width, height, rgba) ?: return null
+    return PageImage(Asset(id, "image/png", png, "$id.png"), width, height, top)
+}
+
+/**
  * Widens whatever pdfium returned to the RGBA the encoder takes.
  *
  * A PDF image is grey, RGB or CMYK depending on its colour space, and the decoded buffer is packed with no padding, so
@@ -80,6 +94,16 @@ private fun ByteArray.cmykToRgba(pixelCount: Int): ByteArray {
         out[pixel * 4 + 3] = OPAQUE
     }
     return out
+}
+
+/** Whether any pixel is less than fully opaque, which is what makes compositing worth its cost. */
+private fun ByteArray.hasTransparency(): Boolean {
+    var index = 3
+    while (index < size) {
+        if (this[index] != OPAQUE) return true
+        index += 4
+    }
+    return false
 }
 
 private const val OPAQUE = 0xFF.toByte()

@@ -63,7 +63,7 @@ internal actual fun extractPages(bytes: ByteArray): List<PageText> {
                 if (page == 0L) continue
                 val textPage = FPDFText_LoadPage(page)
                 if (textPage != 0L) {
-                    pages += pageText(textPage).copyWith(pageImages(page, index), charTops(textPage))
+                    pages += pageText(textPage).copyWith(pageImages(document, page, index), charTops(textPage))
                     FPDFText_ClosePage(textPage)
                 }
                 FPDF_ClosePage(page)
@@ -128,14 +128,24 @@ private fun startsLowerLine(textPage: Long, index: Int): Boolean {
  * reason this is possible on this leg at all: the bitmap and metadata calls hand back raw addresses instead, and the
  * generated bridge passes those as a `Long` the JVM cannot read.
  */
-private fun pageImages(page: Long, pageIndex: Int): List<PageImage> {
+private fun pageImages(document: Long, page: Long, pageIndex: Int): List<PageImage> {
     val out = mutableListOf<PageImage>()
-    collectImages(FPDFPage_CountObjects(page), { FPDFPage_GetObject(page, it) }, "page${pageIndex + 1}", out, 0)
+    collectImages(
+        document,
+        page,
+        FPDFPage_CountObjects(page),
+        { FPDFPage_GetObject(page, it) },
+        "page${pageIndex + 1}",
+        out,
+        0,
+    )
     return out
 }
 
 /** Walks a container's objects, descending into forms, collecting whatever is an image. */
 private fun collectImages(
+    document: Long,
+    page: Long,
     count: Int,
     objectAt: (Int) -> Long,
     path: String,
@@ -146,10 +156,12 @@ private fun collectImages(
         val obj = objectAt(index)
         if (obj == 0L) continue
         when (FPDFPageObj_GetType(obj)) {
-            OBJECT_TYPE_IMAGE -> obj.asImage("$path-image${index + 1}")?.let { out += it }
+            OBJECT_TYPE_IMAGE -> obj.asImage(document, page, "$path-image${index + 1}")?.let { out += it }
             OBJECT_TYPE_FORM ->
                 if (depth < MAX_FORM_DEPTH) {
                     collectImages(
+                        document,
+                        page,
                         FPDFFormObj_CountObjects(obj),
                         { FPDFFormObj_GetObject(obj, it.toLong()) },
                         "$path-form${index + 1}",
@@ -161,7 +173,41 @@ private fun collectImages(
     }
 }
 
-private fun Long.asImage(id: String): PageImage? {
+/**
+ * pdfium's own compositing, reached through a hand-written stub.
+ *
+ * Declared as an object because JNI resolves the symbol from the class it is declared in, and
+ * `Java_io_github_lemcoder_mikromarkdown_pdf_Masks_renderedRgba` is what native/masks.c exports. The library it lives
+ * in is the one the generated bindings already loaded.
+ */
+private object Masks {
+    external fun renderedRgba(document: Long, page: Long, imageObject: Long, size: IntArray): ByteArray?
+}
+
+/**
+ * The composited bytes, or null if this build cannot produce them.
+ *
+ * The stub is built by CMake beside the generated bridges, and a stale one — the library rebuilt without the
+ * hand-written source — has the bridges but not this symbol. Losing the mask is a worse picture; losing the document is
+ * a crash, so the raw stream is used instead.
+ */
+private fun compositedRgba(document: Long, page: Long, imageObject: Long, size: IntArray): ByteArray? =
+    try {
+        Masks.renderedRgba(document, page, imageObject, size)
+    } catch (_: UnsatisfiedLinkError) {
+        null
+    }
+
+private fun Long.asImage(document: Long, page: Long, id: String): PageImage? {
+    // Composited first: it is the only form that carries the soft mask, so a figure meant to sit on
+    // the page transparently does not arrive on a black rectangle.
+    val size = IntArray(2)
+    compositedRgba(document, page, this, size)?.let { rgba ->
+        maskedImageAsset(rgba, size[0], size[1], id, top())?.let {
+            return it
+        }
+    }
+
     val width = IntArray(1)
     val height = IntArray(1)
     if (FPDFImageObj_GetImagePixelSize(this, width, height) == 0) return null
