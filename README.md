@@ -189,12 +189,12 @@ Whole process, best of ten, against the Rust [anydoc](https://github.com/firecra
 
 | input | Kotlin/Native | anydoc (Rust) |
 |---|---|---|
-| 1 KB CSV | 3 ms | 3 ms |
-| 172 KB CSV | 7 ms | 10 ms |
-| 1.8 MB CSV | 51 ms | 71 ms |
-| 3.5 MB CSV | 102 ms | 139 ms |
-| EPUB | 5 ms | 3 ms |
-| Wikipedia HTML | 65 ms | — |
+| 1 KB CSV | 4 ms | 3 ms |
+| 172 KB CSV | 9 ms | 12 ms |
+| 1.8 MB CSV | 69 ms | 89 ms |
+| 3.5 MB CSV | 143 ms | 168 ms |
+| EPUB | 6 ms | 3 ms |
+| Wikipedia HTML | 59 ms | — |
 
 Note when reproducing this: anydoc's npm package is a Node script loading a napi module, so timing
 `node_modules/.bin/anydoc` charges Node's 15 ms startup to Rust and reads as ~22 ms flat. The figures
@@ -220,9 +220,13 @@ Engines whose CLI is missing are skipped. anydoc only handles binary formats, so
 HTML/JSON/XML fixtures.
 
 Both comparison engines are submodules pinned to the versions the figures were measured against —
-anydoc v0.1.8, markitdown v0.1.6 — so a clone needs them fetched before either script has anything
+anydoc v0.2.4, markitdown v0.1.9 — so a clone needs them fetched before either script has anything
 to compare with:
 
 ```bash
 git submodule update --init
 ```
+
+markitdown 0.1.9's `[all]` extra depends on a pre-release Azure package, so install it with
+`uv pip install --prerelease=allow 'markitdown[all]==0.1.9'` (or `pip install --pre`); without that
+flag the resolver fails, and `uvx` quietly falls back to an older release.
