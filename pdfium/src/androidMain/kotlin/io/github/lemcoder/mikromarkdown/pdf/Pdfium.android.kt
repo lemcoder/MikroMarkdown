@@ -3,6 +3,8 @@ package io.github.lemcoder.mikromarkdown.pdf
 import java.io.File
 import pdfium.FPDF_InitLibrary
 import pdfium.FPDF_GetPageCount
+import pdfium.FPDF_GetPageHeightF
+import pdfium.FPDF_GetPageWidthF
 import pdfium.FPDF_LoadPage
 import pdfium.FPDF_ClosePage
 import pdfium.FPDF_CloseDocument
@@ -65,7 +67,8 @@ internal actual fun extractPages(bytes: ByteArray): List<PageText> {
                 if (page == 0L) continue
                 val textPage = FPDFText_LoadPage(page)
                 if (textPage != 0L) {
-                    pages += pageText(textPage).copyWith(pageImages(document, page, index), charTops(textPage))
+                    val images = pageImages(PageScope(document, page, textPage), index)
+                    pages += pageText(textPage).copyWith(images, charTops(textPage))
                     FPDFText_ClosePage(textPage)
                 }
                 FPDF_ClosePage(page)
@@ -127,17 +130,16 @@ private fun startsLowerLine(textPage: Long, index: Int): Boolean {
  * which is the only reason this is possible on this leg at all: the bitmap and metadata calls hand
  * back raw addresses instead, and the generated bridge passes those as a `Long` the JVM cannot read.
  */
-private fun pageImages(document: Long, page: Long, pageIndex: Int): List<PageImage> {
+private fun pageImages(scope: PageScope, pageIndex: Int): List<PageImage> {
     val out = mutableListOf<PageImage>()
     val path = "page${pageIndex + 1}"
-    collectImages(document, page, FPDFPage_CountObjects(page), { FPDFPage_GetObject(page, it) }, path, out, 0)
+    collectImages(scope, FPDFPage_CountObjects(scope.page), { FPDFPage_GetObject(scope.page, it) }, path, out, 0)
     return out
 }
 
 /** Walks a container's objects, descending into forms, collecting whatever is an image. */
 private fun collectImages(
-    document: Long,
-    page: Long,
+    scope: PageScope,
     count: Int,
     objectAt: (Int) -> Long,
     path: String,
@@ -148,12 +150,11 @@ private fun collectImages(
         val obj = objectAt(index)
         if (obj == 0L) continue
         when (FPDFPageObj_GetType(obj)) {
-            OBJECT_TYPE_IMAGE -> obj.asImage(document, page, "$path-image${index + 1}")?.let { out += it }
+            OBJECT_TYPE_IMAGE -> obj.asImage(scope, "$path-image${index + 1}")?.let { out += it }
             OBJECT_TYPE_FORM ->
                 if (depth < MAX_FORM_DEPTH) {
                     collectImages(
-                        document,
-                        page,
+                        scope,
                         FPDFFormObj_CountObjects(obj),
                         { FPDFFormObj_GetObject(obj, it.toLong()) },
                         "$path-form${index + 1}",
@@ -190,11 +191,14 @@ private fun compositedRgba(document: Long, page: Long, imageObject: Long, size: 
         null
     }
 
-private fun Long.asImage(document: Long, page: Long, id: String): PageImage? {
+private fun Long.asImage(scope: PageScope, id: String): PageImage? {
+    // Measured before anything is read: an OCR'd scan has hundreds of fragments, and none is worth decoding.
+    if (!isFigureIn(scope.filter)) return null
+
     // Composited first: it is the only form that carries the soft mask, so a figure meant to sit on
     // the page transparently does not arrive on a black rectangle.
     val size = IntArray(2)
-    compositedRgba(document, page, this, size)?.let { rgba ->
+    compositedRgba(scope.document, scope.page, this, size)?.let { rgba ->
         maskedImageAsset(rgba, size[0], size[1], id, top())?.let { return it }
     }
 
@@ -206,6 +210,22 @@ private fun Long.asImage(document: Long, page: Long, id: String): PageImage? {
     val jpeg = if (hasJpegFilter()) readInto(::FPDFImageObj_GetImageDataRaw) else null
     val pixels = if (jpeg == null) readInto(::FPDFImageObj_GetImageDataDecoded) else null
     return imageAsset(pixels ?: ByteArray(0), width[0], height[0], jpeg, id, top())
+}
+
+/** Whether [filter] counts the object's box as a figure's. */
+private fun Long.isFigureIn(filter: FigureFilter): Boolean {
+    val left = FloatArray(1)
+    val bottom = FloatArray(1)
+    val right = FloatArray(1)
+    val top = FloatArray(1)
+    if (FPDFPageObj_GetBounds(this, left, bottom, right, top) == 0) return true
+    return filter.keeps(left[0], bottom[0], right[0], top[0])
+}
+
+/** The open document and page an image is read from, and the rule that decides whether it is a figure. */
+private class PageScope(val document: Long, val page: Long, textPage: Long) {
+    // The page's size and whether it carries text, which is what decides the scan behind that text.
+    val filter = FigureFilter(FPDF_GetPageWidthF(page), FPDF_GetPageHeightF(page), FPDFText_CountChars(textPage) > 0)
 }
 
 /** The upper edge of the object's box, in page coordinates. */

@@ -36,6 +36,8 @@ import pdfium.FPDFText_LoadPage
 import pdfium.FPDF_CloseDocument
 import pdfium.FPDF_ClosePage
 import pdfium.FPDF_GetPageCount
+import pdfium.FPDF_GetPageHeightF
+import pdfium.FPDF_GetPageWidthF
 import pdfium.FPDF_InitLibrary
 import pdfium.FPDF_LoadMemDocument
 import pdfium.FPDF_LoadPage
@@ -67,7 +69,9 @@ internal actual fun extractPages(bytes: ByteArray): List<PageText> {
                 val page = FPDF_LoadPage(document, index) ?: continue
                 val textPage = FPDFText_LoadPage(page)
                 if (textPage != null) {
-                    pages += pageText(textPage).copyWith(pageImages(page, index), charTops(textPage))
+                    pages +=
+                        pageText(textPage)
+                            .copyWith(pageImages(page, index, figureFilter(page, textPage)), charTops(textPage))
                     FPDFText_ClosePage(textPage)
                 }
                 FPDF_ClosePage(page)
@@ -135,9 +139,10 @@ private fun startsLowerLine(textPage: pdfium.FPDF_TEXTPAGE, index: Int): Boolean
  * rather than going through arrays, so only the plumbing differs.
  */
 @OptIn(ExperimentalForeignApi::class)
-private fun pageImages(page: pdfium.FPDF_PAGE, pageIndex: Int): List<PageImage> {
+private fun pageImages(page: pdfium.FPDF_PAGE, pageIndex: Int, filter: FigureFilter): List<PageImage> {
     val out = mutableListOf<PageImage>()
     collectImages(
+        filter,
         FPDFPage_CountObjects(page),
         { FPDFPage_GetObject(page, it) },
         "page${pageIndex + 1}",
@@ -150,6 +155,7 @@ private fun pageImages(page: pdfium.FPDF_PAGE, pageIndex: Int): List<PageImage> 
 /** Walks a container's objects, descending into forms, collecting whatever is an image. */
 @OptIn(ExperimentalForeignApi::class)
 private fun collectImages(
+    filter: FigureFilter,
     count: Int,
     objectAt: (Int) -> pdfium.FPDF_PAGEOBJECT?,
     path: String,
@@ -159,10 +165,11 @@ private fun collectImages(
     for (index in 0 until count) {
         val obj = objectAt(index) ?: continue
         when (FPDFPageObj_GetType(obj)) {
-            OBJECT_TYPE_IMAGE -> obj.asImage("$path-image${index + 1}")?.let { out += it }
+            OBJECT_TYPE_IMAGE -> obj.asImage(filter, "$path-image${index + 1}")?.let { out += it }
             OBJECT_TYPE_FORM ->
                 if (depth < MAX_FORM_DEPTH) {
                     collectImages(
+                        filter,
                         FPDFFormObj_CountObjects(obj),
                         { FPDFFormObj_GetObject(obj, it.toULong()) },
                         "$path-form${index + 1}",
@@ -175,7 +182,10 @@ private fun collectImages(
 }
 
 @OptIn(ExperimentalForeignApi::class)
-private fun pdfium.FPDF_PAGEOBJECT.asImage(id: String): PageImage? {
+private fun pdfium.FPDF_PAGEOBJECT.asImage(filter: FigureFilter, id: String): PageImage? {
+    // Measured before anything is read: an OCR'd scan has hundreds of fragments, and none is worth decoding.
+    if (!isFigureIn(filter)) return null
+
     val size =
         memScoped {
             val width = alloc<UIntVar>()
@@ -187,6 +197,22 @@ private fun pdfium.FPDF_PAGEOBJECT.asImage(id: String): PageImage? {
     val jpeg = if (hasJpegFilter()) readInto(::FPDFImageObj_GetImageDataRaw) else null
     val pixels = if (jpeg == null) readInto(::FPDFImageObj_GetImageDataDecoded) else null
     return imageAsset(pixels ?: ByteArray(0), size.first, size.second, jpeg, id, top())
+}
+
+/** The page's size and whether it carries text, which is what decides the scan behind that text. */
+@OptIn(ExperimentalForeignApi::class)
+private fun figureFilter(page: pdfium.FPDF_PAGE, textPage: pdfium.FPDF_TEXTPAGE): FigureFilter =
+    FigureFilter(FPDF_GetPageWidthF(page), FPDF_GetPageHeightF(page), FPDFText_CountChars(textPage) > 0)
+
+/** Whether [filter] counts the object's box as a figure's. */
+@OptIn(ExperimentalForeignApi::class)
+private fun pdfium.FPDF_PAGEOBJECT.isFigureIn(filter: FigureFilter): Boolean = memScoped {
+    val left = alloc<FloatVar>()
+    val bottom = alloc<FloatVar>()
+    val right = alloc<FloatVar>()
+    val top = alloc<FloatVar>()
+    if (FPDFPageObj_GetBounds(this@isFigureIn, left.ptr, bottom.ptr, right.ptr, top.ptr) == 0) true
+    else filter.keeps(left.value, bottom.value, right.value, top.value)
 }
 
 /** The upper edge of the object's box, in page coordinates. */

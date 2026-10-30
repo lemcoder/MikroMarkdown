@@ -1,7 +1,10 @@
 package io.github.lemcoder.mikromarkdown.pdf
 
+import io.github.lemcoder.mikromarkdown.model.Asset
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 /** Pins what [restored] does with pdfium's hyphen marker, without needing a PDF that happens to contain one. */
 class PageTextTest {
@@ -58,4 +61,48 @@ class PageTextTest {
 
         assertEquals("nothing to restore", listOf(page).restored())
     }
+
+    @Test
+    fun `a figure is placed at the start of a line, not inside a word`() {
+        // "Since" on the second line has a tall S: only its later letters sit below the figure's top edge.
+        val text = "first line\nSince here"
+        val tops = FloatArray(text.length) { if (it < 11) 700f else if (it == 11) 610f else 590f }
+        val page = PageText(text, IntArray(0), charTops = tops)
+
+        assertEquals(11, page.placementOf(figure(top = 600f)))
+    }
+
+    @Test
+    fun `a figure above all text goes first, and one below it goes last`() {
+        val page = PageText("only line", IntArray(0), charTops = FloatArray(9) { 500f })
+
+        assertEquals(0, page.placementOf(figure(top = 800f)))
+        assertEquals(9, page.placementOf(figure(top = 100f)))
+    }
+
+    @Test
+    fun `an OCR fragment is not a figure, whatever its resolution`() {
+        val filter = FigureFilter(pageWidth = 612f, pageHeight = 792f, pageHasText = true)
+
+        // A vector arrow over a name, a third of an inch wide and a fifth tall.
+        assertFalse(filter.keeps(left = 100f, bottom = 500f, right = 124f, top = 514f))
+        // A wide but thin strip is a fragment too.
+        assertFalse(filter.keeps(left = 72f, bottom = 500f, right = 540f, top = 520f))
+        // A figure two inches square.
+        assertTrue(filter.keeps(left = 72f, bottom = 300f, right = 216f, top = 444f))
+    }
+
+    @Test
+    fun `the scan behind a page's text is not a figure, but a page with nothing else keeps it`() {
+        val wholePage = floatArrayOf(0f, 0f, 612f, 792f)
+
+        assertFalse(
+            FigureFilter(612f, 792f, pageHasText = true).keeps(wholePage[0], wholePage[1], wholePage[2], wholePage[3])
+        )
+        assertTrue(
+            FigureFilter(612f, 792f, pageHasText = false).keeps(wholePage[0], wholePage[1], wholePage[2], wholePage[3])
+        )
+    }
+
+    private fun figure(top: Float) = PageImage(Asset("figure", "image/png", ByteArray(0), "figure.png"), 1, 1, top)
 }

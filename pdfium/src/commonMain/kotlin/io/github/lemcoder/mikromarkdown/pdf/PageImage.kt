@@ -11,6 +11,38 @@ import io.github.lemcoder.mikromarkdown.model.Asset
 internal class PageImage(val asset: Asset, val width: Int, val height: Int, val top: Float = Float.MAX_VALUE)
 
 /**
+ * Which of a page's images are figures, judged by each one's box on the page, in points.
+ *
+ * An OCR'd scan is a picture of every page with the recognised text laid over it, and two kinds of image come with that
+ * which are not figures. The page picture itself — a background as large as the page, which on a cleaned scan is
+ * near-blank — duplicates the text layer above it. And the patches for whatever the OCR could not read — an arrow over
+ * a vector's name, an italic symbol, a speck — number in the hundreds, and as figures they cut the text at every one.
+ *
+ * Size on the page tells both apart from a figure; the pixel size cannot, since it depends on the scan's resolution. A
+ * page-sized image is kept where the page has no text, because there it is the only content the page has. A box pdfium
+ * could not measure is kept.
+ */
+internal class FigureFilter(
+    private val pageWidth: Float,
+    private val pageHeight: Float,
+    private val pageHasText: Boolean,
+) {
+    fun keeps(left: Float, bottom: Float, right: Float, top: Float): Boolean {
+        val width = right - left
+        val height = top - bottom
+        if (width < MIN_FIGURE_SIDE || height < MIN_FIGURE_SIDE) return false
+        val coversPage = width * height >= PAGE_COVERAGE * pageWidth * pageHeight
+        return !(pageHasText && pageWidth > 0f && pageHeight > 0f && coversPage)
+    }
+}
+
+/** Half an inch, in PDF points: below it on either side, an image is a fragment rather than a figure. */
+private const val MIN_FIGURE_SIDE = 36f
+
+/** The share of the page an image covers before, on a page with text, it is the scan behind that text. */
+private const val PAGE_COVERAGE = 0.8f
+
+/**
  * An image pdfium found on a page, turned into a file.
  *
  * Two shapes come back and they need opposite treatment. A photograph is stored as JPEG and the stream *is* the file,

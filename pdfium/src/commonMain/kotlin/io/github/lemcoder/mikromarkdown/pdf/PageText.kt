@@ -28,11 +28,16 @@ internal class PageText(
      * first character that sits below its top edge, which is where a reader coming down the page would meet it.
      * Single-column text is what this gets right; two columns interleave by height and would need the column boundary
      * first.
+     *
+     * The cut is moved back to the start of that character's line. Characters on one line do not share a top — a
+     * capital stands taller, and an OCR'd baseline wanders — so the first one below the figure can sit mid-word, and a
+     * figure there splits `Since` into `Si` and `nce`.
      */
     fun placementOf(image: PageImage): Int {
         if (charTops.isEmpty()) return text.length
         val index = charTops.indexOfFirst { it < image.top }
-        return if (index < 0) text.length else index
+        if (index < 0) return text.length
+        return text.lastIndexOf('\n', index - 1) + 1
     }
 }
 
