@@ -8,18 +8,24 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -37,6 +43,7 @@ import io.github.lemcoder.mikromarkdown.MikroMarkdown
 import io.github.lemcoder.mikromarkdown.MikroMarkdownException
 import io.github.lemcoder.mikromarkdown.StreamInfo
 import io.github.lemcoder.mikromarkdown.compose.DocumentView
+import io.github.lemcoder.mikromarkdown.compose.PagedDocumentView
 import io.github.lemcoder.mikromarkdown.model.Document
 import io.github.lemcoder.mikromarkdown.pdf.PdfiumConverter
 import java.io.IOException
@@ -76,17 +83,18 @@ private fun ReaderScreen(opened: Uri? = null) {
     var settings by rememberSaveable(stateSaver = ReaderSettingsSaver) { mutableStateOf(ReaderSettings()) }
     var settingsOpen by remember { mutableStateOf(false) }
 
-    fun load(uri: Uri) {
-        val name = context.displayName(uri)
+    // The documents bundled under assets/samples, one per format.
+    val samples = remember { context.assets.list(SAMPLES).orEmpty().sorted() }
+
+    /** Reads [name]'s bytes with [read], which returns null if there is nothing to read, and converts them. */
+    fun load(name: String, read: () -> ByteArray?) {
         state = ReaderState.Loading
         scope.launch {
             state =
                 // Reading and converting are both blocking, and a large document is not quick.
                 withContext(Dispatchers.IO) {
                     try {
-                        val bytes =
-                            context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                                ?: return@withContext ReaderState.Failed(name, "Could not open the file")
+                        val bytes = read() ?: return@withContext ReaderState.Failed(name, "Could not open the file")
                         val info = StreamInfo(extension = name.substringAfterLast('.', "").lowercase(), filename = name)
                         ReaderState.Loaded(name, mikroMarkdown.parse(bytes, info))
                     } catch (e: MikroMarkdownException) {
@@ -104,6 +112,11 @@ private fun ReaderScreen(opened: Uri? = null) {
         }
     }
 
+    fun load(uri: Uri) =
+        load(context.displayName(uri)) { context.contentResolver.openInputStream(uri)?.use { it.readBytes() } }
+
+    fun loadSample(name: String) = load(name) { context.assets.open("$SAMPLES/$name").use { it.readBytes() } }
+
     val picker =
         rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? -> uri?.let { load(it) } }
 
@@ -115,6 +128,9 @@ private fun ReaderScreen(opened: Uri? = null) {
             TopAppBar(
                 title = { Text((state as? ReaderState.Loaded)?.name ?: "MikroMarkdown") },
                 actions = {
+                    if (state != ReaderState.Empty) {
+                        TextButton(onClick = { state = ReaderState.Empty }) { Text("Samples") }
+                    }
                     IconButton(onClick = { settingsOpen = true }) { Text("Aa") }
                     Button(onClick = { picker.launch(arrayOf("*/*")) }) { Text("Open") }
                 },
@@ -123,9 +139,14 @@ private fun ReaderScreen(opened: Uri? = null) {
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
             when (val current = state) {
-                ReaderState.Empty -> Hint("Open a document to read it.")
+                ReaderState.Empty -> Samples(samples, onPick = ::loadSample)
                 ReaderState.Loading -> CircularProgressIndicator()
-                is ReaderState.Loaded -> DocumentView(current.document, Modifier.fillMaxSize(), settings.style())
+                is ReaderState.Loaded ->
+                    if (settings.paginated) {
+                        PagedDocumentView(current.document, Modifier.fillMaxSize(), settings.style())
+                    } else {
+                        DocumentView(current.document, Modifier.fillMaxSize(), settings.style())
+                    }
                 is ReaderState.Failed -> Failure(current)
             }
         }
@@ -141,6 +162,22 @@ private fun Hint(text: String) {
     Text(text, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(24.dp))
 }
 
+/** The bundled documents, and a hint that anything else comes through Open. */
+@Composable
+private fun Samples(names: List<String>, onPick: (String) -> Unit) {
+    if (names.isEmpty()) return Hint("Open a document to read it.")
+    LazyColumn(Modifier.fillMaxSize()) {
+        item { Hint("Pick a sample, or open your own document.") }
+        items(names) { name ->
+            ListItem(
+                headlineContent = { Text(name) },
+                supportingContent = { Text(name.substringAfterLast('.').uppercase()) },
+                modifier = Modifier.fillMaxWidth().clickable { onPick(name) },
+            )
+        }
+    }
+}
+
 @Composable
 private fun Failure(state: ReaderState.Failed) {
     Column(
@@ -152,6 +189,9 @@ private fun Failure(state: ReaderState.Failed) {
         Text(state.message, style = MaterialTheme.typography.bodyMedium)
     }
 }
+
+/** Where the build puts the bundled documents inside the APK's assets. */
+private const val SAMPLES = "samples"
 
 /** The name the picker shows, which is also where the extension the converters select on comes from. */
 private fun android.content.Context.displayName(uri: Uri): String =
