@@ -35,6 +35,10 @@ dependencies {
     androidTestImplementation(platform(libs.compose.bom))
     androidTestImplementation(libs.compose.ui.test.junit4)
     androidTestImplementation(libs.androidx.test.runner)
+    // ui-test-junit4 brings Espresso 3.5, which reflects on InputManager.getInstance — gone in recent Android, so
+    // every test failed in its rule's setup. Newer Espresso and test core no longer make that call.
+    androidTestImplementation(libs.androidx.test.core)
+    androidTestImplementation(libs.androidx.test.espresso)
     androidTestImplementation(libs.junit4)
     androidTestImplementation(libs.kotlin.test)
     debugImplementation(libs.compose.ui.test.manifest)
