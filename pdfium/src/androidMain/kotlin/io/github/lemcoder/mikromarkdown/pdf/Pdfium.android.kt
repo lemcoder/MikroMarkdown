@@ -24,6 +24,8 @@ import pdfium.FPDFText_CountChars
 import pdfium.FPDFText_IsHyphen
 import pdfium.FPDFText_GetCharBox
 import pdfium.FPDFText_GetText
+import java.nio.Buffer
+import java.nio.ByteBuffer
 
 /**
  * pdfium is initialised once per process and never destroyed.
@@ -236,22 +238,27 @@ private fun charTops(textPage: Long): FloatArray {
     return tops
 }
 
-/** pdfium's two-call buffer protocol: ask for the length, allocate, ask again. */
-private fun Long.readInto(read: (Long, ByteArray?, Long) -> Long): ByteArray? {
+/**
+ * pdfium's two-call buffer protocol: ask for the length, allocate, ask again.
+ *
+ * A `void*` crosses JNI as a direct buffer's address, so pdfium writes into native memory and the bytes are copied out.
+ */
+private fun Long.readInto(read: (Long, Buffer?, Long) -> Long): ByteArray? {
     val length = read(this, null, 0L)
     if (length <= 0L || length > MAX_IMAGE_BYTES) return null
-    val buffer = ByteArray(length.toInt())
-    return if (read(this, buffer, length) == 0L) null else buffer
+    val buffer = ByteBuffer.allocateDirect(length.toInt())
+    if (read(this, buffer, length) == 0L) return null
+    return ByteArray(length.toInt()).also { buffer.get(it) }
 }
 
 private fun Long.hasJpegFilter(): Boolean =
     (0 until FPDFImageObj_GetImageFilterCount(this)).any { filter ->
         val length = FPDFImageObj_GetImageFilter(this, filter, null, 0L)
         if (length <= 0L) return@any false
-        val name = ByteArray(length.toInt())
-        FPDFImageObj_GetImageFilter(this, filter, name, length)
+        val buffer = ByteBuffer.allocateDirect(length.toInt())
+        FPDFImageObj_GetImageFilter(this, filter, buffer, length)
         // The buffer is a NUL-terminated C string.
-        name.decodeToString().trimEnd('\u0000') == JPEG_FILTER
+        ByteArray(length.toInt()).also { buffer.get(it) }.decodeToString().trimEnd('\u0000') == JPEG_FILTER
     }
 
 /** A guard against a malformed stream claiming a size that would exhaust the heap. */

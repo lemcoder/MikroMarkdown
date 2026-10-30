@@ -1,4 +1,4 @@
-import io.github.lemcoder.interop.jvmInterops
+import io.github.lemcoder.model.NativeTarget
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
@@ -52,14 +52,8 @@ val writeLinkedDef by tasks.registering {
 }
 
 kotlin {
-    macosArm64 {
-        val platform = pdfiumRoot.dir("mac-arm64")
-        compilations.getByName("main").cinterops.create("pdfium") {
-            defFile(linkedDef.get().asFile)
-            includeDirs(platform.dir("include"))
-            extraOpts("-libraryPath", platform.dir("lib").asFile.absolutePath)
-        }
-    }
+    // The binding below declares this target's cinterop; nothing is declared here by hand.
+    macosArm64()
 
     androidLibrary {
         namespace = "io.github.lemcoder.mikromarkdown.pdfium"
@@ -80,51 +74,40 @@ kotlin {
     }
 }
 
-// The bindings load the stub by name, and the stub finds pdfium through the rpath CMake gave it.
-tasks.named<Test>("jvmTest") {
-    dependsOn("linkJvmInteropPdfium")
-    useJUnitPlatform()
-    systemProperty(
-        "java.library.path",
-        layout.buildDirectory.dir("jvmInterop/pdfium/lib").get().asFile.absolutePath,
-    )
-}
+tasks.named<Test>("jvmTest") { useJUnitPlatform() }
+
+/** The Konan targets each Android ABI is built as. */
+val androidTargets = mapOf("arm64-v8a" to NativeTarget.ANDROID_ARM64, "x86_64" to NativeTarget.ANDROID_X64)
 
 /**
- * The JVM and Android legs bind the same .def separately, one declaration each.
+ * One binding for every consumer: KGP's cinterop for macosArm64, generated JNI bindings plus a stub library for the JVM
+ * and Android.
  *
- * They could share one, and deliberately do not: the two runtimes diverge over time — how a library is loaded, what a
- * file path means — and a shared declaration turns the first difference into a restructure rather than an edit.
+ * Every consumer reads the generated .def. Kotlin/Native needs its `linkerOpts`; the JNI legs ignore them, because
+ * CMake links the stub, and pdfium is C++ whose runtime comes along correctly only that way. The package is named here
+ * rather than read from the .def, which does not exist until `writeLinkedDef` runs.
  */
-kotlin.jvm().compilations["main"].jvmInterops {
-    create("pdfium") {
-        defFile(project.file("src/nativeInterop/cinterop/pdfium.def"))
-        includeDirs.from(pdfiumRoot.dir("mac-arm64/include"))
+konan {
+    // The Kotlin/Native distribution of this project's Kotlin version; the JNI generator runs inside it.
+    config { konanHome.set(kotlinNativeDistribution()) }
 
-        externalNativeBuild {
-            cmake {
-                path.set(project.file("native/CMakeLists.txt"))
-                targets.add("pdfium-jni")
-                arguments.add("-DPDFium_DIR=${pdfiumRoot.dir("mac-arm64").asFile.absolutePath}")
-            }
-        }
-    }
-}
+    bindings {
+        create("pdfium") {
+            defFile.set(linkedDef)
+            packageName.set("pdfium")
+            includeDirs.from(pdfiumRoot.dir("mac-arm64/include"))
 
-kotlin.targets.getByName("android").compilations.getByName("main").jvmInterops {
-    create("pdfiumAndroid") {
-        defFile(project.file("src/nativeInterop/cinterop/pdfium.def"))
-        includeDirs.from(pdfiumRoot.dir("android-arm64/include"))
-
-        externalNativeBuild {
-            cmake {
-                path.set(project.file("native/CMakeLists.txt"))
-                targets.add("pdfium-jni")
-
-                for ((abiName, platformName) in pdfiumAbis) {
-                    abi(abiName) {
-                        platform.set(libs.versions.android.minSdk.get().toInt())
-                        arguments.add("-DPDFium_DIR=${pdfiumRoot.dir(platformName).asFile.absolutePath}")
+            jni {
+                cmake {
+                    path.set(project.file("native/CMakeLists.txt"))
+                    buildTargets.add("pdfium-jni")
+                    target(NativeTarget.MACOS_ARM64) {
+                        arguments.add("-DPDFium_DIR=${pdfiumRoot.dir("mac-arm64").asFile.absolutePath}")
+                    }
+                    for ((abi, platform) in pdfiumAbis) {
+                        target(androidTargets.getValue(abi)) {
+                            arguments.add("-DPDFium_DIR=${pdfiumRoot.dir(platform).asFile.absolutePath}")
+                        }
                     }
                 }
             }
@@ -173,13 +156,13 @@ run {
 tasks.matching { it.name.startsWith("cinteropPdfium") }.configureEach { dependsOn("downloadPdfium", writeLinkedDef) }
 
 tasks
-    .matching { it.name.startsWith("generateJvmInterop") || it.name.startsWith("cmakeConfigure") }
-    .configureEach { dependsOn("downloadPdfium") }
+    .matching { it.name.startsWith("generateJniPdfium") || it.name.startsWith("cmakeBuildJniPdfium") }
+    .configureEach { dependsOn("downloadPdfium", writeLinkedDef) }
 
 // The JNI generator reads the Kotlin/Native distribution, and the Kotlin plugin fetches that only when
 // something compiles a native target. On a machine that has never built one — a CI runner, a fresh clone
 // running `:pdfium:jvmTest` on its own — generating the bindings fails with "No Kotlin/Native distribution
 // found" instead, so the download is ordered before it rather than left to whatever else ran first.
 tasks
-    .matching { it.name.startsWith("generateJvmInterop") }
+    .matching { it.name.startsWith("generateJniPdfium") }
     .configureEach { dependsOn("downloadKotlinNativeDistribution") }
