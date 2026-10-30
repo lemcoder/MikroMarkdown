@@ -1,4 +1,4 @@
-package io.github.lemcoder.mikromarkdown.model
+package io.github.lemcoder.mikromarkdown.pdf
 
 import java.io.ByteArrayInputStream
 import javax.imageio.ImageIO

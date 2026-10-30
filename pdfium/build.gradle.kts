@@ -71,7 +71,11 @@ kotlin {
     jvm()
 
     sourceSets {
-        commonMain.dependencies { implementation(project(":library")) }
+        commonMain.dependencies {
+            implementation(project(":library"))
+            // The deflate inside PngEncoder, which wraps the raw bitmaps pdfium hands back.
+            implementation(libs.korlibs.compression)
+        }
         jvmTest.dependencies { implementation(libs.kotlin.test) }
     }
 }

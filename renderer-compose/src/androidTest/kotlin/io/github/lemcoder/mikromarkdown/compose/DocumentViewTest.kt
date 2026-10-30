@@ -17,8 +17,8 @@ import io.github.lemcoder.mikromarkdown.model.Document
 import io.github.lemcoder.mikromarkdown.model.Heading
 import io.github.lemcoder.mikromarkdown.model.Image
 import io.github.lemcoder.mikromarkdown.model.Paragraph
-import io.github.lemcoder.mikromarkdown.model.PngEncoder
 import io.github.lemcoder.mikromarkdown.model.Text
+import java.io.ByteArrayOutputStream
 import java.io.File
 import kotlin.test.assertTrue
 import org.junit.Rule
@@ -33,18 +33,22 @@ import org.junit.Test
  */
 class DocumentViewTest {
 
+    private companion object {
+        const val OPAQUE = 0xFF shl 24
+    }
+
     @get:Rule val compose = createComposeRule()
 
-    /** A solid block of one colour, big enough that a pixel in the middle is unambiguous. */
+    /**
+     * A solid block of one colour, big enough that a pixel in the middle is unambiguous. Callers pass RGB, so the alpha
+     * is forced opaque.
+     */
     private fun solidPng(color: Int, size: Int = 64): ByteArray {
-        val pixels = ByteArray(size * size * 4)
-        for (pixel in 0 until size * size) {
-            pixels[pixel * 4] = (color shr 16 and 0xFF).toByte()
-            pixels[pixel * 4 + 1] = (color shr 8 and 0xFF).toByte()
-            pixels[pixel * 4 + 2] = (color and 0xFF).toByte()
-            pixels[pixel * 4 + 3] = 0xFF.toByte()
+        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888).apply { eraseColor(color or OPAQUE) }
+        return ByteArrayOutputStream().use { out ->
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+            out.toByteArray()
         }
-        return requireNotNull(PngEncoder.encode(size, size, pixels))
     }
 
     private fun documentWithFigure(color: Int): Document {

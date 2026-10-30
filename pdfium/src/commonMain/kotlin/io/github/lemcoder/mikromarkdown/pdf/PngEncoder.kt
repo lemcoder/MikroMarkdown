@@ -1,4 +1,4 @@
-package io.github.lemcoder.mikromarkdown.model
+package io.github.lemcoder.mikromarkdown.pdf
 
 import korlibs.io.compression.compress
 import korlibs.io.compression.deflate.ZLib
@@ -14,7 +14,7 @@ import korlibs.io.compression.deflate.ZLib
  * Filtering is left at "none", which trades a larger file for a much simpler encoder. A screenshot inside a PDF
  * compresses well enough on deflate alone.
  */
-public object PngEncoder {
+internal object PngEncoder {
 
     private val SIGNATURE = byteArrayOf(-119, 80, 78, 71, 13, 10, 26, 10)
 
@@ -26,7 +26,7 @@ public object PngEncoder {
      * @param pixels RGBA, four bytes per pixel, row-major, [width] * [height] * 4 bytes long.
      * @return the PNG file, or null if the dimensions and the buffer disagree.
      */
-    public fun encode(width: Int, height: Int, pixels: ByteArray): ByteArray? {
+    fun encode(width: Int, height: Int, pixels: ByteArray): ByteArray? {
         if (width <= 0 || height <= 0) return null
         if (pixels.size != width * height * CHANNELS) return null
 

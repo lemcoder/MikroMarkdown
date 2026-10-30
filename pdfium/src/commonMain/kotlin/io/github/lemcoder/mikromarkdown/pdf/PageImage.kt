@@ -1,7 +1,6 @@
 package io.github.lemcoder.mikromarkdown.pdf
 
 import io.github.lemcoder.mikromarkdown.model.Asset
-import io.github.lemcoder.mikromarkdown.model.PngEncoder
 
 /**
  * One image found on a page, already in a form something can display.

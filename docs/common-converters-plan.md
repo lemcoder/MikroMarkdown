@@ -170,7 +170,7 @@ renders as a single paragraph where PDFBox produced seven. Character boxes give 
 the vertical gaps between them give the paragraphs.
 
 ### Phase 3b — PDF images
-The **PNG encoder is done**: `PngEncoder` in `commonMain` writes 8-bit RGBA through korlibs' ZLib,
+The **PNG encoder is done**: `PngEncoder` (now in `:pdfium`, its only user) writes 8-bit RGBA through korlibs' ZLib,
 checked on the JVM by decoding what it writes with ImageIO and on native by validating the chunks
 and CRCs outside the process. Filtering stays at "none" — a larger file for a much smaller encoder.
 
