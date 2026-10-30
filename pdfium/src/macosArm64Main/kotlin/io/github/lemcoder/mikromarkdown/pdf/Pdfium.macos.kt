@@ -71,7 +71,7 @@ internal actual fun extractPages(bytes: ByteArray): List<PageText> {
                 if (textPage != null) {
                     pages +=
                         pageText(textPage)
-                            .copyWith(pageImages(page, index, figureFilter(page, textPage)), charTops(textPage))
+                            .copyWith(pageImages(page, index, figureFilter(page, textPage)), charBoxes(textPage))
                     FPDFText_ClosePage(textPage)
                 }
                 FPDF_ClosePage(page)
@@ -225,21 +225,22 @@ private fun pdfium.FPDF_PAGEOBJECT.top(): Float = memScoped {
     if (FPDFPageObj_GetBounds(this@top, left.ptr, bottom.ptr, right.ptr, top.ptr) == 0) Float.MAX_VALUE else top.value
 }
 
-/** Every character's upper edge, read once for the page. */
+/** Every character's box, read once for the page. */
 @OptIn(ExperimentalForeignApi::class)
-private fun charTops(textPage: pdfium.FPDF_TEXTPAGE): FloatArray = memScoped {
+private fun charBoxes(textPage: pdfium.FPDF_TEXTPAGE): CharBoxes = memScoped {
     val count = FPDFText_CountChars(textPage)
-    val tops = FloatArray(count)
+    val boxes = CharBoxes(count)
     val left = alloc<DoubleVar>()
     val right = alloc<DoubleVar>()
     val bottom = alloc<DoubleVar>()
     val top = alloc<DoubleVar>()
     for (index in 0 until count) {
-        tops[index] =
-            if (FPDFText_GetCharBox(textPage, index, left.ptr, right.ptr, bottom.ptr, top.ptr) == 0) Float.MAX_VALUE
-            else top.value.toFloat()
+        if (FPDFText_GetCharBox(textPage, index, left.ptr, right.ptr, bottom.ptr, top.ptr) != 0) {
+            boxes[index] =
+                floatArrayOf(left.value.toFloat(), bottom.value.toFloat(), right.value.toFloat(), top.value.toFloat())
+        }
     }
-    tops
+    boxes
 }
 
 /** pdfium's two-call buffer protocol: ask for the length, allocate, ask again. */

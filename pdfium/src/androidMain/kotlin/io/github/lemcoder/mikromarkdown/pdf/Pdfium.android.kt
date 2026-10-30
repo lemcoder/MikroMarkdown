@@ -68,7 +68,7 @@ internal actual fun extractPages(bytes: ByteArray): List<PageText> {
                 val textPage = FPDFText_LoadPage(page)
                 if (textPage != 0L) {
                     val images = pageImages(PageScope(document, page, textPage), index)
-                    pages += pageText(textPage).copyWith(images, charTops(textPage))
+                    pages += pageText(textPage).copyWith(images, charBoxes(textPage))
                     FPDFText_ClosePage(textPage)
                 }
                 FPDF_ClosePage(page)
@@ -238,24 +238,24 @@ private fun Long.top(): Float {
 }
 
 /**
- * Every character's upper edge, read once for the page.
+ * Every character's box, read once for the page: figures are placed by it, and the reading order rebuilt from it.
  *
  * Asking per figure would be the same call repeated for each of them; a paper's page can carry
  * thirty images over two thousand characters.
  */
-private fun charTops(textPage: Long): FloatArray {
+private fun charBoxes(textPage: Long): CharBoxes {
     val count = FPDFText_CountChars(textPage)
-    val tops = FloatArray(count)
+    val boxes = CharBoxes(count)
     val left = DoubleArray(1)
     val right = DoubleArray(1)
     val bottom = DoubleArray(1)
     val top = DoubleArray(1)
     for (index in 0 until count) {
-        tops[index] =
-            if (FPDFText_GetCharBox(textPage, index, left, right, bottom, top) == 0) Float.MAX_VALUE
-            else top[0].toFloat()
+        if (FPDFText_GetCharBox(textPage, index, left, right, bottom, top) != 0) {
+            boxes[index] = floatArrayOf(left[0].toFloat(), bottom[0].toFloat(), right[0].toFloat(), top[0].toFloat())
+        }
     }
-    return tops
+    return boxes
 }
 
 /**

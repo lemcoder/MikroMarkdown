@@ -29,7 +29,7 @@ public class PdfiumConverter : DocumentConverter {
     }
 
     override fun parse(bytes: ByteArray, info: StreamInfo): Document {
-        val pages = extractPages(bytes)
+        val pages = extractPages(bytes).map { it.inReadingOrder() }
         return Document(blocks = pages.blocks(), assets = pages.flatMap { page -> page.images.map { it.asset } })
     }
 }

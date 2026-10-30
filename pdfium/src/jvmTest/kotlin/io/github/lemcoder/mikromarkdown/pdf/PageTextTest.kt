@@ -66,15 +66,19 @@ class PageTextTest {
     fun `a figure is placed at the start of a line, not inside a word`() {
         // "Since" on the second line has a tall S: only its later letters sit below the figure's top edge.
         val text = "first line\nSince here"
-        val tops = FloatArray(text.length) { if (it < 11) 700f else if (it == 11) 610f else 590f }
-        val page = PageText(text, IntArray(0), charTops = tops)
+        val page =
+            PageText(
+                text,
+                IntArray(0),
+                boxes = tops(text.length) { if (it < 11) 700f else if (it == 11) 610f else 590f },
+            )
 
         assertEquals(11, page.placementOf(figure(top = 600f)))
     }
 
     @Test
     fun `a figure above all text goes first, and one below it goes last`() {
-        val page = PageText("only line", IntArray(0), charTops = FloatArray(9) { 500f })
+        val page = PageText("only line", IntArray(0), boxes = tops(9) { 500f })
 
         assertEquals(0, page.placementOf(figure(top = 800f)))
         assertEquals(9, page.placementOf(figure(top = 100f)))
@@ -103,6 +107,12 @@ class PageTextTest {
             FigureFilter(612f, 792f, pageHasText = false).keeps(wholePage[0], wholePage[1], wholePage[2], wholePage[3])
         )
     }
+
+    /** Boxes that matter only for their tops. */
+    private fun tops(count: Int, top: (Int) -> Float) =
+        CharBoxes(count).apply {
+            for (index in 0 until count) set(index, floatArrayOf(0f, top(index) - 10f, 5f, top(index)))
+        }
 
     private fun figure(top: Float) = PageImage(Asset("figure", "image/png", ByteArray(0), "figure.png"), 1, 1, top)
 }

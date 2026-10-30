@@ -14,12 +14,11 @@ internal class PageText(
     val text: String,
     val hyphenWraps: IntArray,
     val images: List<PageImage> = emptyList(),
-    /** The upper edge of each character's box, in page coordinates, parallel to [text]. */
-    val charTops: FloatArray = FloatArray(0),
+    /** Each character's box, in page coordinates, parallel to [text]. */
+    val boxes: CharBoxes = CharBoxes(0),
 ) {
     /** The text side and the image side are read separately; this joins them. */
-    fun copyWith(images: List<PageImage>, charTops: FloatArray): PageText =
-        PageText(text, hyphenWraps, images, charTops)
+    fun copyWith(images: List<PageImage>, boxes: CharBoxes): PageText = PageText(text, hyphenWraps, images, boxes)
 
     /**
      * Where a figure belongs in the page's text.
@@ -34,8 +33,8 @@ internal class PageText(
      * figure there splits `Since` into `Si` and `nce`.
      */
     fun placementOf(image: PageImage): Int {
-        if (charTops.isEmpty()) return text.length
-        val index = charTops.indexOfFirst { it < image.top }
+        if (boxes.size == 0) return text.length
+        val index = (0 until boxes.size).firstOrNull { boxes.top(it) < image.top } ?: -1
         if (index < 0) return text.length
         return text.lastIndexOf('\n', index - 1) + 1
     }
